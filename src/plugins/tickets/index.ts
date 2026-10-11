@@ -11,6 +11,7 @@ import { successCard } from "../../shared/messages";
 import { removeClosedTicketAlert } from "./alerts";
 import { ticketsSchema } from "./config";
 import { checkTicketInactivity } from "./inactivity";
+import { handleTicketJoin } from "./joining";
 import { ticketLabel, ticketPanel } from "./presentation";
 import { TicketRepository } from "./repository";
 import { handleTicketReview } from "./reviews";
@@ -177,6 +178,13 @@ export const ticketsPlugin: Plugin = {
     return true;
   },
   async component(context, interaction) {
+    if (
+      interaction.isButton() &&
+      interaction.customId.startsWith("tickets:join:")
+    ) {
+      await handleTicketJoin(context, interaction);
+      return;
+    }
     if (
       (interaction.isMessageComponent() || interaction.isModalSubmit()) &&
       interaction.customId.startsWith("tickets:editor:")
