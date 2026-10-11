@@ -13,17 +13,17 @@ import { welcomePlugin } from "./welcome";
 
 /** Add a feature here once. Its settings editor and command deployment follow automatically. */
 export function createPlugins(): Plugin[] {
-  const plugins: Plugin[] = [
-    levelsPlugin,
-    welcomePlugin,
-    createRolesPlugin(),
-    birthdayPlugin,
-    ticketsPlugin,
-    createStarboardPlugin(),
-    createTempVoicePlugin(),
-    createSlowmodePlugin(),
-    createBotGuardPlugin(),
-    createModerationPlugin(),
-  ];
-  return [...plugins, createConfigurationPlugin(plugins)];
+    const plugins: Plugin[] = [
+        levelsPlugin,
+        welcomePlugin,
+        createRolesPlugin(),
+        birthdayPlugin,
+        ticketsPlugin,
+        createStarboardPlugin(),
+        createTempVoicePlugin(),
+        createSlowmodePlugin(),
+        createBotGuardPlugin(),
+        createModerationPlugin(),
+    ];
+    return [...plugins, createConfigurationPlugin(plugins)];
 }

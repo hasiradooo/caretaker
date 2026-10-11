@@ -51,7 +51,10 @@ export async function startApplication(
         presence: {
             status: "online",
             activities: [
-                { type: ActivityType.Custom, name: `${env.BOT_NAME} · /config` },
+                {
+                    type: ActivityType.Custom,
+                    name: `${env.BOT_NAME} · /config`,
+                },
             ],
         },
     });
@@ -164,7 +167,11 @@ export async function startApplication(
                 new Promise<never>((_resolve, reject) => {
                     startupTimeout = setTimeout(
                         () =>
-                            reject(new Error("Discord startup timed out after 60 seconds")),
+                            reject(
+                                new Error(
+                                    "Discord startup timed out after 60 seconds",
+                                ),
+                            ),
                         60000,
                     );
                 }),
@@ -200,7 +207,9 @@ export async function startApplication(
             if (cleanupTask) return;
             cleanupTask = context.state
                 .prune()
-                .catch((error: unknown) => log.warn("State cleanup failed", error))
+                .catch((error: unknown) =>
+                    log.warn("State cleanup failed", error),
+                )
                 .finally(() => {
                     cleanupTask = undefined;
                 });

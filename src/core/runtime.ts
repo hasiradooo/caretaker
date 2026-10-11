@@ -20,7 +20,8 @@ export class PluginRuntime {
         const ids = plugins.map((plugin) => plugin.id);
         const commands = plugins.flatMap(
             (plugin) =>
-                plugin.commands?.map((command) => command.data.toJSON().name) ?? [],
+                plugin.commands?.map((command) => command.data.toJSON().name) ??
+                [],
         );
         if (
             new Set(ids).size !== ids.length ||
@@ -38,7 +39,10 @@ export class PluginRuntime {
                     handler: (...args: ClientEvents[K]) => Promise<void>,
                 ) => {
                     const listener = (...args: ClientEvents[K]) =>
-                        this.track(() => handler(...args), `${plugin.id}:${event}`);
+                        this.track(
+                            () => handler(...args),
+                            `${plugin.id}:${event}`,
+                        );
                     client.on(event, listener);
                     this.cleanup.push(() => client.off(event, listener));
                 },
@@ -87,9 +91,15 @@ export class PluginRuntime {
             if (!interaction.inCachedGuild()) {
                 if (interaction.guildId === null && interaction.isButton()) {
                     const plugin = this.plugins.find(
-                        (candidate) => candidate.id === interaction.customId.split(":")[0],
+                        (candidate) =>
+                            candidate.id === interaction.customId.split(":")[0],
                     );
-                    if (await plugin?.directMessageComponent?.(this.context, interaction))
+                    if (
+                        await plugin?.directMessageComponent?.(
+                            this.context,
+                            interaction,
+                        )
+                    )
                         return;
                 }
                 await interaction.reply({
@@ -107,7 +117,8 @@ export class PluginRuntime {
                     .flatMap((plugin) => plugin.commands ?? [])
                     .find(
                         (candidate) =>
-                            candidate.data.toJSON().name === interaction.commandName,
+                            candidate.data.toJSON().name ===
+                            interaction.commandName,
                     );
                 if (!command)
                     throw new UserError(
@@ -125,7 +136,8 @@ export class PluginRuntime {
                 interaction.isModalSubmit()
             ) {
                 const plugin = this.plugins.find(
-                    (candidate) => candidate.id === interaction.customId.split(":")[0],
+                    (candidate) =>
+                        candidate.id === interaction.customId.split(":")[0],
                 );
                 if (!plugin?.component)
                     throw new UserError(
@@ -139,11 +151,14 @@ export class PluginRuntime {
                 error instanceof UserError
                     ? error.message
                     : error instanceof ZodError
-                        ? `Invalid settings: ${error.issues
-                            .map((issue) => `${issue.path.join(".")}: ${issue.message}`)
+                      ? `Invalid settings: ${error.issues
+                            .map(
+                                (issue) =>
+                                    `${issue.path.join(".")}: ${issue.message}`,
+                            )
                             .join("; ")
                             .slice(0, 1600)}`
-                        : "Something went wrong. Your request could not be completed; please try again.";
+                      : "Something went wrong. Your request could not be completed; please try again.";
             try {
                 const payload = card({
                     title: "Could not complete that",
@@ -161,7 +176,9 @@ export class PluginRuntime {
                 else
                     await interaction.reply({
                         ...payload,
-                        flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
+                        flags:
+                            MessageFlags.IsComponentsV2 |
+                            MessageFlags.Ephemeral,
                     });
             } catch (replyError) {
                 this.context.log.warn(
@@ -180,7 +197,10 @@ export class PluginRuntime {
             try {
                 await plugin.stop?.(this.context);
             } catch (error) {
-                this.context.log.warn(`Shutdown failed for plugin ${plugin.id}`, error);
+                this.context.log.warn(
+                    `Shutdown failed for plugin ${plugin.id}`,
+                    error,
+                );
             }
         }
     }
