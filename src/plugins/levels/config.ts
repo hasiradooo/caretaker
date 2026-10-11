@@ -14,6 +14,7 @@ export const levelsSchema = z
     ...baseSettings,
     // null disables announcements; XP and role rewards remain enabled separately.
     reward_channel_id: optionalId,
+    // null allows rank/leaderboard anywhere; admin setup and message XP are unaffected.
     command_channel_id: optionalId,
     xp_cooldown_seconds: z.number().int().min(1).max(86400).default(60),
     xp_gain: z
