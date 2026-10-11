@@ -125,12 +125,17 @@ they do not connect to your live services. A Discord test-server smoke test is
 still needed before public use. Start commands from the repository root so the
 migrations and certificate paths resolve consistently.
 
-For Docker, `docker compose build`, perform database setup once, then
-`docker compose up -d`. The image includes your local Aiven public CA file if
-present at build time; rebuild after changing that certificate. Secrets come
-from `.env` at runtime and are excluded from the build context. HTTP is off by
-default and has no published port. See [DATABASE.md](docs/DATABASE.md) for setup
-inside the container.
+For Docker, follow the [build and run guide](docs/DOCKER.md). With your existing
+`.env`, certificate and database ready, stop any local bot process and run:
+
+```sh
+docker compose up -d --build
+docker compose logs --follow --tail=100 bot
+```
+
+The image builds the production bundle. Secrets are loaded from `.env` at runtime,
+and the `certs/` directory is mounted read-only. Replacing your Aiven CA requires
+a restart, not a rebuild. HTTP stays off by default with no published port.
 
 The old social/OAuth, economy, music, sponsor integrations and external webhook
 handlers were unfinished placeholders. They are not advertised as working

@@ -1,12 +1,17 @@
-node_modules
-dist
-.git
-.env
-.env.*
-!.env.example
-legacy
-backups
-original-manifest.json
-.agents
-.trae
-coverage
+# Send only the files needed to build and operate the bot.
+# Local .env files, credentials, logs, backups and project CAs stay on the host.
+**
+!package.json
+!bun.lock
+!tsconfig.json
+!src/
+!src/**
+!scripts/
+!scripts/**
+!migrations/
+!migrations/**
+!database/
+!database/**
+!certs/
+certs/*
+!certs/supabase-root-2021.crt
