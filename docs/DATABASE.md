@@ -124,7 +124,7 @@ older embedded values. Keep the backup if older settings need manual review.
 
 The regular test suite uses PGlite. To also test postgres.js serialization over
 a real PostgreSQL connection, set `TEST_POSTGRES_JSON=1` and run
-`bun test tests/postgres-json.integration.test.ts` from the configured project.
+`bun test ./tests/postgres-json.integration.test.ts` from the configured project.
 This opt-in test uses temporary tables that are dropped at the end; it does not
 change server settings or member records.
 

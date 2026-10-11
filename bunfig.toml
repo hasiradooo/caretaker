@@ -1,0 +1,3 @@
+[test]
+# Keep archived copies of tests in backups out of local and CI runs.
+root = "./tests"
