@@ -75,8 +75,10 @@ visible throughout setup, so no separate setup commands or pasted IDs are needed
   `/level leaderboard`, or select **Allow anywhere** to clear the restriction.
   This saves `command_channel_id`; `null` (the default) permits all channels.
   The channel must be visible and writable by the bot. Other channels, including
-  threads under the selected channel, are rejected with a link to the chosen
-  channel. Admin settings, reward management and XP edits remain available
+  threads under the selected channel, receive a private error with a link to the
+  chosen channel. Successful ranks and leaderboards are public; validation,
+  lookup and publication errors are visible only to the person using the command.
+  Admin settings, reward management and XP edits remain available
   elsewhere. Message XP and level-up announcements are not affected.
 
 **Enable levels** / **Pause levels** and **Refresh** are available in every
