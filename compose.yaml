@@ -1,0 +1,21 @@
+services:
+  bot:
+    build: .
+    restart: unless-stopped
+    init: true
+    env_file: .env
+    environment:
+      NODE_ENV: production
+    # HTTP stays disabled and unexposed unless you explicitly configure it.
+    # To enable it, set HTTP_ENABLED=true and HTTP_HOST=0.0.0.0 in .env,
+    # configure API_SECRET_KEY, and publish only a loopback port:
+    # ports:
+    #   - "127.0.0.1:8000:8000"
+    stop_grace_period: 30s
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true

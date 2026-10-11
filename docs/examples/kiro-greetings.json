@@ -1,0 +1,7 @@
+{
+  "enabled": true,
+  "welcome_channel_id": "1558420962993512529",
+  "leave_channel_id": "1558420962993512529",
+  "welcome_message": "**{user} just noclipped into {server}.**\nThe lights are buzzing. The carpet is suspiciously damp. Kiro insists this is normal.\n\n### 📋 Your survival checklist\n📜 Read the facility rules: <#1558419074881683567>\n🎭 Choose your symptoms: <#1558419074881683572>\n🪪 Tell us what followed you in: <#1558419077092081667>\n💬 Join the other wanderers: <#1558419075418431592>\n\nYou are wanderer **#{member_count}**. Grab a seat, say hello, and please stop licking the wallpaper.\n-# If a door says EXIT, ask Kiro why it has teeth.",
+  "goodbye_message": "**{display_name} found a door we forgot to lock.**\nTheir footsteps have faded. Their chair is now occupied by something claiming it was always here.\n\n**{member_count} wanderers remain.** Please return to <#1558419075418431592> and act like this was part of the evacuation drill.\n-# Kiro has marked this as an approved disappearance. The paperwork is a drawing of a sandwich."
+}

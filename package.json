@@ -1,0 +1,38 @@
+{
+  "name": "caretaker",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "bun": ">=1.3.0"
+  },
+  "scripts": {
+    "start": "bun src/index.ts",
+    "dev": "bun --watch src/index.ts",
+    "check": "tsc --noEmit",
+    "test": "bun test tests",
+    "lint": "biome check src scripts tests package.json tsconfig.json",
+    "format": "biome check --write src scripts tests package.json tsconfig.json",
+    "build": "bun build src/index.ts --target=bun --packages=external --outdir=dist",
+    "validate": "bun run check && bun run lint && bun test tests && bun run build",
+    "commands:deploy": "bun scripts/deploy-commands.ts",
+    "profile:update": "bun scripts/update-profile.ts",
+    "discord:check": "bun scripts/check-discord.ts",
+    "bot:smoke": "bun scripts/smoke-test.ts",
+    "db:check": "bun scripts/check-database.ts",
+    "db:init": "bun scripts/init-database.ts",
+    "db:migrate": "bun scripts/migrate.ts",
+    "encrypt-token": "bun scripts/encrypt-token.ts"
+  },
+  "dependencies": {
+    "discord.js": "14.25.1",
+    "postgres": "3.4.8",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.4.6",
+    "@electric-sql/pglite": "^0.3.14",
+    "@types/bun": "^1.3.0",
+    "typescript": "^5.9.3"
+  }
+}
