@@ -331,7 +331,8 @@ Also inspect its other role overrides to ensure only intended staff can see it.
 
 Open `/starboard settings` for a private Components V2 editor (Manage Server
 required). Use **Channel**, **Reaction threshold**, **Emoji**, **Watched channels**,
-the self-star toggle, **Preview**, and **Enable/Pause starboard**. The preview uses
+the self-star toggle, **Enable/Disable auto-reactions**, **Preview**, and
+**Enable/Pause starboard**. The preview uses
 the real highlight layout with sample text and never posts or notifies anyone.
 Channel and rule edits save without automatically enabling the feature.
 
@@ -347,6 +348,16 @@ paged so longer existing lists remain editable. Selected text/announcement
 channels include their public threads; selecting a forum/media channel watches
 its public posts. Private channels and private threads remain excluded. The
 destination cannot watch itself. Clearing the destination also pauses starboard.
+
+**Auto-reactions** (`auto_react`, default false) add the configured emoji to new
+member messages in watched channels, including public threads and new forum/media
+posts. Starboard must also be enabled and have a destination. The bot needs View
+Channel, Read Message History and Add Reactions in the watched channels. Bot,
+webhook and system messages are skipped, as are private/unwatched channels,
+archived/locked threads and adult sources with a non-adult destination. Existing
+messages are not scanned. Disabling the option leaves existing reactions intact.
+The bot's own reaction never contributes to the threshold or displayed highlight
+count, even after disabling auto-reactions or restarting the bot.
 
 Set `channel_id`, `threshold` (default 15), `emoji` (default ⭐),
 `allow_self_star` (default false) and `watch_channels` (`null` means all eligible

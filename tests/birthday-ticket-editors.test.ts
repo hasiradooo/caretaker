@@ -97,6 +97,7 @@ async function fixture(kind: "birthday" | "tickets" | "starboard") {
     threshold: 15,
     watch_channels: null,
     allow_self_star: false,
+    auto_react: false,
     custom_note: "Keep me",
   });
   await settings.patch(guildId, "birthday", birthdaySchema, {
@@ -603,6 +604,20 @@ test("starboard editor validates destinations, previews privately and preserves 
       "select * from discord.starboards where source_message_id='editor-source'",
     ),
   ).toHaveLength(1);
+});
+
+test("starboard auto-reactions toggle persists without enabling starboard or changing other settings", async () => {
+  const f = await fixture("starboard");
+  expect(starboardSchema.parse({}).auto_react).toBe(false);
+  const before = await f.starboard();
+  await f.act("auto-react");
+  expect(await f.starboard()).toEqual({ ...before, auto_react: true });
+  expect(componentText(f.payload())).toContain("**Auto-reactions:** On");
+  await f.open();
+  expect(componentText(f.payload())).toContain("**Auto-reactions:** On");
+  await f.act("auto-react");
+  expect(await f.starboard()).toEqual(before);
+  expect(f.send).not.toHaveBeenCalled();
 });
 
 test("starboard inputs reject invalid rules, allow cancellation, and cannot overwrite a newer edit", async () => {
