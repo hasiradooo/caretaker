@@ -3,6 +3,7 @@ import { birthdayPlugin } from "./birthday";
 import { createBotGuardPlugin } from "./bot-guard";
 import { createConfigurationPlugin } from "./configuration";
 import { levelsPlugin } from "./levels";
+import { createModerationPlugin } from "./moderation";
 import { createRolesPlugin } from "./roles";
 import { createSlowmodePlugin } from "./slowmode";
 import { createStarboardPlugin } from "./starboard";
@@ -22,6 +23,7 @@ export function createPlugins(): Plugin[] {
     createTempVoicePlugin(),
     createSlowmodePlugin(),
     createBotGuardPlugin(),
+    createModerationPlugin(),
   ];
   return [...plugins, createConfigurationPlugin(plugins)];
 }

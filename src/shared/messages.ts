@@ -23,6 +23,7 @@ export const featureIcons: Record<string, string> = {
   tempvc: "🔊",
   slowmode: "⏳",
   auto_ban_bots: "🛡️",
+  moderation: "🛡️",
 };
 
 interface CardOptions {
