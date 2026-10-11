@@ -44,7 +44,8 @@ duplicate starts and expires after two minutes if a process crashes.
 
 `/config` requires Manage Server permission. Use `/config view` to inspect and
 edit settings, `/config set` for one field, and `/config enable` or `disable` to
-control a feature. `/level rank` and `/level leaderboard` reply publicly; other
+control a feature. Successful `/level rank` and `/level leaderboard` results are
+public, while errors (including attempts in the wrong channel) stay private. Other
 commands reply privately. Ranks and leaderboards use display names without
 pinging members. Level-up announcements mention the member in the configured
 channel. Open `/level settings` for one private editor with

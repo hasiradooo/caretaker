@@ -17,6 +17,7 @@ import { renderTemplate } from "../../shared/templates";
 import { levelsSchema } from "./config";
 import { MAX_TOTAL_XP, messageXp, totalXp } from "./math";
 import { levelDisplayName, levelProfile } from "./presentation";
+import { publishLevelResult } from "./replies";
 import { LevelsRepository } from "./repository";
 import { executeRewardCommand, rewardCommands } from "./reward-commands";
 import { syncLevelRewards } from "./rewards";
@@ -104,10 +105,9 @@ export const levelsPlugin: Plugin = {
   commands: [
     {
       data: command,
-      visibility: (interaction) =>
-        ["rank", "leaderboard"].includes(interaction.options.getSubcommand())
-          ? "public"
-          : "private",
+      // A private defer keeps every error visible only to the caller.
+      // Successful rank and leaderboard results are published separately below.
+      visibility: () => "private",
       async execute(context, interaction) {
         if (interaction.options.getSubcommandGroup(false) === "rewards") {
           await executeRewardCommand(context, interaction);
@@ -197,7 +197,9 @@ export const levelsPlugin: Plugin = {
           const level = row?.level ?? 0;
           const xp = row?.xp ?? 0;
           const next = (level + 1) * 3000;
-          await interaction.editReply(
+          await publishLevelResult(
+            context,
+            interaction,
             card({
               title: "Member rank",
               icon: "✨",
@@ -227,7 +229,9 @@ export const levelsPlugin: Plugin = {
               return `${["🥇", "🥈", "🥉"][Number(row.rank) - 1] ?? `**#${row.rank}**`} **${profile.name}**\n-# Level ${row.level} · ${totalXp(row.level, row.xp).toLocaleString()} lifetime XP`;
             }),
           );
-          await interaction.editReply(
+          await publishLevelResult(
+            context,
+            interaction,
             card({
               title: "Leaderboard",
               icon: "🏆",

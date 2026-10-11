@@ -44,7 +44,7 @@ const guild = {
   client: { users: { cache: new Collection([[userId, user]]) } },
 };
 
-test("rank and leaderboard defer publicly, while XP management remains private", async () => {
+test("all level commands defer privately so validation failures never become public", async () => {
   for (const action of [
     "rank",
     "leaderboard",
@@ -69,11 +69,9 @@ test("rank and leaderboard defer publicly, while XP management remains private",
         })),
       },
     ]).dispatch(interaction as unknown as ChatInputCommandInteraction);
-    expect(interaction.deferReply.mock.calls[0]?.[0]).toEqual(
-      ["rank", "leaderboard"].includes(action)
-        ? {}
-        : { flags: MessageFlags.Ephemeral },
-    );
+    expect(interaction.deferReply.mock.calls[0]?.[0]).toEqual({
+      flags: MessageFlags.Ephemeral,
+    });
   }
 });
 
@@ -97,6 +95,8 @@ test("rank uses the server nickname and avatar without a mention", async () => {
         getSubcommand: () => "rank",
       },
       editReply,
+      followUp: mock(async (_payload: unknown) => undefined),
+      deleteReply: mock(async () => undefined),
     } as unknown as ChatInputCommandInteraction<"cached">,
   );
   const payload = editReply.mock.calls[0]?.[0];
@@ -133,6 +133,8 @@ test("leaderboard shows names in rank order and survives an unavailable member",
         getInteger: () => 1,
       },
       editReply,
+      followUp: mock(async (_payload: unknown) => undefined),
+      deleteReply: mock(async () => undefined),
     } as unknown as ChatInputCommandInteraction<"cached">,
   );
   const text = componentText(editReply.mock.calls[0]?.[0]);
@@ -173,6 +175,8 @@ test.each([
       getInteger: () => 1,
     },
     editReply,
+    followUp: mock(async (_payload: unknown) => undefined),
+    deleteReply: mock(async () => undefined),
   };
   const command = levelsPlugin.commands?.[0];
   if (!command) throw new Error("Level command is missing");
@@ -212,6 +216,193 @@ test("names fall back to global display names and cannot become Markdown or ment
   expect(name).not.toContain("@everyone");
   expect(name).not.toContain("<@123>");
   expect(name).not.toContain("\n");
+});
+
+function runtimeScenario(action: "rank" | "leaderboard", configPatch = {}) {
+  const config = levelsSchema.parse({
+    enabled: true,
+    command_channel_id: "400000000000000001",
+    ...configPatch,
+  });
+  const order: string[] = [];
+  const deliveries: Array<{
+    kind: "original" | "followup";
+    private: boolean;
+    payload: unknown;
+  }> = [];
+  const interaction = {
+    commandName: "level",
+    guildId: "guild",
+    guild,
+    user,
+    channelId: "400000000000000001",
+    isRepliable: () => true,
+    inCachedGuild: () => true,
+    isChatInputCommand: () => true,
+    deferred: false,
+    replied: false,
+    ephemeral: false,
+    options: {
+      getSubcommandGroup: () => null,
+      getSubcommand: () => action,
+      getUser: () => null,
+      getInteger: () => 1,
+    },
+    deferReply: mock(async (options: { flags?: number }) => {
+      order.push("defer");
+      interaction.deferred = true;
+      interaction.ephemeral = !!((options.flags ?? 0) & MessageFlags.Ephemeral);
+    }),
+    editReply: mock(async (payload: unknown) => {
+      order.push("edit");
+      deliveries.push({
+        kind: "original",
+        private: interaction.ephemeral,
+        payload,
+      });
+      interaction.replied = true;
+    }),
+    followUp: mock(async (payload: { flags?: number }) => {
+      order.push("followup");
+      // Discord edits an unfinished deferred original on the first follow-up.
+      // Model that behavior so a public payload alone cannot make this test pass.
+      const isPrivate = interaction.replied
+        ? !!((payload.flags ?? 0) & MessageFlags.Ephemeral)
+        : interaction.ephemeral;
+      deliveries.push({ kind: "followup", private: isPrivate, payload });
+      interaction.replied = true;
+    }),
+    deleteReply: mock(async () => {
+      order.push("delete");
+    }),
+  };
+  const settings = {
+    get: mock(async () => {
+      order.push("settings");
+      expect(interaction.deferred).toBe(true);
+      return config;
+    }),
+  };
+  const query = mock(async () => [
+    { user_id: userId, rank: 1, level: 0, xp: 19 },
+  ]);
+  const log = { error: mock(() => {}), warn: mock(() => {}) };
+  const context = {
+    botId: "bot",
+    settings,
+    db: { query },
+    log,
+  } as unknown as Context;
+  const run = () =>
+    new PluginRuntime(context, [levelsPlugin]).dispatch(
+      interaction as unknown as ChatInputCommandInteraction,
+    );
+  return { interaction, settings, query, log, run, deliveries, order };
+}
+
+test.each([
+  "rank",
+  "leaderboard",
+] as const)("%s wrong-channel error is private and never publishes a message", async (action) => {
+  const f = runtimeScenario(action);
+  f.interaction.channelId = "400000000000000002";
+  await f.run();
+  expect(f.interaction.deferReply).toHaveBeenCalledWith({
+    flags: MessageFlags.Ephemeral,
+  });
+  expect(f.deliveries).toHaveLength(1);
+  expect(f.deliveries[0]?.private).toBe(true);
+  expect(componentText(f.deliveries[0]?.payload)).toContain(
+    "Use <#400000000000000001> for level commands.",
+  );
+  expect(f.query).not.toHaveBeenCalled();
+  expect(f.interaction.followUp).not.toHaveBeenCalled();
+  expect(f.interaction.deleteReply).not.toHaveBeenCalled();
+});
+
+test.each([
+  "rank",
+  "leaderboard",
+] as const)("%s successful result is public and the private preview is removed", async (action) => {
+  const f = runtimeScenario(action);
+  await f.run();
+  expect(f.order).toEqual(["defer", "settings", "edit", "followup", "delete"]);
+  const publicPosts = f.deliveries.filter((item) => !item.private);
+  expect(publicPosts).toHaveLength(1);
+  expect(componentText(publicPosts[0]?.payload)).toContain(
+    action === "rank" ? "Member rank" : "Leaderboard",
+  );
+  expect(publicPosts[0]?.payload).toMatchObject({
+    flags: MessageFlags.IsComponentsV2,
+    allowedMentions: { parse: [], repliedUser: false },
+  });
+  expect(componentText(publicPosts[0]?.payload)).not.toContain(`<@${userId}>`);
+  expect(f.interaction.deleteReply).toHaveBeenCalledTimes(1);
+  expect(f.log.error).not.toHaveBeenCalled();
+});
+
+test.each([
+  "rank",
+  "leaderboard",
+] as const)("%s disabled levels and database failures remain private", async (action) => {
+  const disabled = runtimeScenario(action, { enabled: false });
+  await disabled.run();
+  expect(componentText(disabled.deliveries[0]?.payload)).toContain(
+    "Levels are disabled",
+  );
+  const failed = runtimeScenario(action);
+  failed.query.mockRejectedValueOnce(new Error("Database unavailable"));
+  await failed.run();
+  for (const f of [disabled, failed]) {
+    expect(f.deliveries.every((item) => item.private)).toBe(true);
+    expect(f.interaction.followUp).not.toHaveBeenCalled();
+    expect(componentText(f.deliveries[0]?.payload)).toContain(
+      "Could not complete that",
+    );
+  }
+});
+
+test("failure to publish a rank replaces only the private preview with an error", async () => {
+  const f = runtimeScenario("rank");
+  f.interaction.followUp.mockRejectedValueOnce(
+    new Error("Missing permissions"),
+  );
+  await f.run();
+  expect(f.deliveries.every((item) => item.private)).toBe(true);
+  expect(componentText(f.deliveries.at(-1)?.payload)).toContain(
+    "Could not complete that",
+  );
+  expect(f.interaction.deleteReply).not.toHaveBeenCalled();
+});
+
+test("failure to complete the private defer prevents publication", async () => {
+  const f = runtimeScenario("rank");
+  f.interaction.editReply.mockRejectedValueOnce(
+    new Error("Discord unavailable"),
+  );
+  await f.run();
+  expect(f.interaction.followUp).not.toHaveBeenCalled();
+  expect(f.deliveries.every((item) => item.private)).toBe(true);
+  expect(componentText(f.deliveries.at(-1)?.payload)).toContain(
+    "Could not complete that",
+  );
+});
+
+test("private preview cleanup failure never changes or duplicates the published leaderboard", async () => {
+  const f = runtimeScenario("leaderboard");
+  f.interaction.deleteReply.mockRejectedValueOnce(
+    new Error("Discord unavailable"),
+  );
+  await f.run();
+  expect(f.interaction.followUp).toHaveBeenCalledTimes(1);
+  expect(f.deliveries.filter((item) => !item.private)).toHaveLength(1);
+  expect(
+    f.deliveries.some((item) =>
+      componentText(item.payload).includes("Could not complete that"),
+    ),
+  ).toBe(false);
+  expect(f.log.warn).toHaveBeenCalledTimes(1);
+  expect(f.log.error).not.toHaveBeenCalled();
 });
 
 function levelUpScenario(rewardChannelId: string | null, canSend = true) {
