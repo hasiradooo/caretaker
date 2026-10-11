@@ -11,7 +11,7 @@ export function watchedChannels(config: StarboardSettings): string {
 }
 
 export function starboardSummary(config: StarboardSettings): string {
-  return `**Starboard:** ${config.enabled ? "Enabled" : "Paused"}\n**Destination:** ${config.channel_id ? `<#${config.channel_id}>` : "Not selected"}\n**Reaction:** ${config.emoji} · **Threshold:** ${config.threshold}\n**Self-stars:** ${config.allow_self_star ? "Counted" : "Ignored"}\n**Watching:** ${watchedChannels(config)}`;
+  return `**Starboard:** ${config.enabled ? "Enabled" : "Paused"}\n**Destination:** ${config.channel_id ? `<#${config.channel_id}>` : "Not selected"}\n**Reaction:** ${config.emoji} · **Threshold:** ${config.threshold}\n**Self-stars:** ${config.allow_self_star ? "Counted" : "Ignored"}\n**Auto-reactions:** ${config.auto_react ? "On" : "Off"}\n**Watching:** ${watchedChannels(config)}`;
 }
 
 /** One renderer for real highlights and the private example in the editor. */

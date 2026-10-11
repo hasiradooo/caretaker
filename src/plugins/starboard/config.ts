@@ -8,6 +8,7 @@ export const starboardSchema = z
     threshold: z.number().int().min(1).max(1000).default(15),
     watch_channels: z.array(snowflake).max(100).nullable().default(null),
     allow_self_star: z.boolean().default(false),
+    auto_react: z.boolean().default(false),
   })
   .passthrough();
 

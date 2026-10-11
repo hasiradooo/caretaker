@@ -174,6 +174,7 @@ export class StarboardSettingsEditor extends SettingsEditor<
         );
       sections.push(
         "Messages appear when they reach the reaction threshold. Editing settings does not scan old messages or move existing highlights; eligible reactions apply the current rules.",
+        "Auto-reactions add the selected emoji to new member posts in watched channels while starboard is enabled. The bot's reaction never counts toward the threshold. Requires Add Reactions and Read Message History in those channels.",
       );
       actions.push(
         editorRow(
@@ -181,6 +182,12 @@ export class StarboardSettingsEditor extends SettingsEditor<
           button("threshold", "Reaction threshold", ButtonStyle.Primary),
           button("emoji", "Emoji"),
           button("watch", "Watched channels"),
+          button(
+            "auto-react",
+            config.auto_react
+              ? "Disable auto-reactions"
+              : "Enable auto-reactions",
+          ),
         ),
         editorRow(
           button(
@@ -362,6 +369,13 @@ export class StarboardSettingsEditor extends SettingsEditor<
           return {
             patch: { allow_self_star: !config.allow_self_star },
             notice: "✓ Self-star rule saved.",
+          };
+        if (action === "auto-react")
+          return {
+            patch: { auto_react: !config.auto_react },
+            notice: config.auto_react
+              ? "✓ Auto-reactions disabled. Existing reactions are kept."
+              : "✓ Auto-reactions enabled for new posts while starboard is active. Older posts are unchanged.",
           };
         if (action === "toggle") {
           if (!config.enabled)
