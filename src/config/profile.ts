@@ -4,8 +4,8 @@
  * Preview with `bun run profile:update`, then publish with `--apply`.
  */
 export const botProfile = {
-  bio: [
-    "Server tools for roles, levels, welcome messages, birthdays, and support tickets.",
-    "Use /help to get started. Features are configured separately for each server.",
-  ].join("\n"),
+    bio: [
+        "Server tools for roles, levels, welcome messages, birthdays, and support tickets.",
+        "Use /help to get started. Features are configured separately for each server.",
+    ].join("\n"),
 };

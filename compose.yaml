@@ -1,11 +1,23 @@
 services:
   bot:
-    build: .
+    image: caretaker:local
+    build:
+      context: .
+      target: runtime
     restart: unless-stopped
     init: true
     env_file: .env
     environment:
       NODE_ENV: production
+    # Keep DATABASE_CA_FILE relative to /app, for example certs/ca.pem.
+    # Mount the directory so replacing a certificate does not require a rebuild.
+    volumes:
+      - type: bind
+        source: ./certs
+        target: /app/certs
+        read_only: true
+        bind:
+          create_host_path: false
     # HTTP stays disabled and unexposed unless you explicitly configure it.
     # To enable it, set HTTP_ENABLED=true and HTTP_HOST=0.0.0.0 in .env,
     # configure API_SECRET_KEY, and publish only a loopback port:
@@ -19,3 +31,8 @@ services:
       - ALL
     security_opt:
       - no-new-privileges:true
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"

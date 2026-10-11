@@ -58,7 +58,7 @@ fallback to the conversation channel. Open `/level settings`, choose
 ### Level settings editor
 
 `/level settings` opens one private Components V2 editor for admins with Manage
-Server. Its **Rewards**, **Announcements**, and **XP settings** buttons remain
+Server. Its **Rewards**, **Announcements**, **XP settings**, and **Commands** buttons remain
 visible throughout setup, so no separate setup commands or pasted IDs are needed.
 
 - **Rewards:** choose **Add reward**, select a role, then **Set level & save**.
@@ -71,6 +71,15 @@ visible throughout setup, so no separate setup commands or pasted IDs are needed
 - **XP settings:** edit minimum/maximum XP per message and cooldown together in
   one form. Changes affect future awards; saved progress, multipliers and ignored
   roles/channels remain unchanged.
+- **Commands:** choose one text or announcement channel for `/level rank` and
+  `/level leaderboard`, or select **Allow anywhere** to clear the restriction.
+  This saves `command_channel_id`; `null` (the default) permits all channels.
+  The channel must be visible and writable by the bot. Other channels, including
+  threads under the selected channel, receive a private error with a link to the
+  chosen channel. Successful ranks and leaderboards are public; validation,
+  lookup and publication errors are visible only to the person using the command.
+  Admin settings, reward management and XP edits remain available
+  elsewhere. Message XP and level-up announcements are not affected.
 
 **Enable levels** / **Pause levels** and **Refresh** are available in every
 section. Pausing keeps members' saved XP and current roles. Changes save when a
@@ -205,7 +214,9 @@ Open `/ticket settings` for one private Components V2 editor with these tabs:
 - **Channels**: choose the private-thread parent channel, support-panel destination, staff alerts
   and private transcripts. Each picker checks channel type and bot permissions.
 - **Staff roles**: add or remove selected roles without replacing the rest of the list.
-  Current staff members are added to new private threads. Existing ticket memberships
+  Staff choose **Join ticket** in the staff alert instead of being added automatically.
+  Configure a staff alerts channel so staff without Manage Threads can join on demand.
+  Existing ticket memberships
   are unchanged. Staff roles are mentioned only in the staff-alert channel; only
   configured roles can be pinged. Ticket introductions contain no staff tags and
   never fall back to notifying staff inside the thread. Non-mentionable roles require
@@ -231,7 +242,12 @@ optional `transcript_channel_id`. Publish `/ticket panel` or use `/ticket open`.
 Customize `panel.title`, `panel.message` and `panel.button_label` in the editor.
 New tickets are private threads in a server text channel. `parent_channel_id`
 falls back to `panel_channel_id` when unset. The bot creates and owns the thread,
-with member invitations disabled, and adds the opener plus current staff members.
+with member invitations disabled, and adds only the opener. Staff are not automatically
+subscribed to tickets. The **Join ticket** button on a staff alert adds only the staff
+member who clicks it, after checking their current roles and channel permissions.
+It does not claim the ticket or reset its inactivity timer. The button also works
+for ongoing tickets while new ticket creation is paused. Closed/locked tickets
+cannot be joined through it.
 The bot needs View Channel, Read Message History, Create Private Threads,
 Send Messages in Threads and Manage Threads in the parent. Participants need
 View Channel and Send Messages in Threads there. Discord members with Manage
@@ -322,7 +338,8 @@ Also inspect its other role overrides to ensure only intended staff can see it.
 
 Open `/starboard settings` for a private Components V2 editor (Manage Server
 required). Use **Channel**, **Reaction threshold**, **Emoji**, **Watched channels**,
-the self-star toggle, **Preview**, and **Enable/Pause starboard**. The preview uses
+the self-star toggle, **Enable/Disable auto-reactions**, **Preview**, and
+**Enable/Pause starboard**. The preview uses
 the real highlight layout with sample text and never posts or notifies anyone.
 Channel and rule edits save without automatically enabling the feature.
 
@@ -338,6 +355,16 @@ paged so longer existing lists remain editable. Selected text/announcement
 channels include their public threads; selecting a forum/media channel watches
 its public posts. Private channels and private threads remain excluded. The
 destination cannot watch itself. Clearing the destination also pauses starboard.
+
+**Auto-reactions** (`auto_react`, default false) add the configured emoji to new
+member messages in watched channels, including public threads and new forum/media
+posts. Starboard must also be enabled and have a destination. The bot needs View
+Channel, Read Message History and Add Reactions in the watched channels. Bot,
+webhook and system messages are skipped, as are private/unwatched channels,
+archived/locked threads and adult sources with a non-adult destination. Existing
+messages are not scanned. Disabling the option leaves existing reactions intact.
+The bot's own reaction never contributes to the threshold or displayed highlight
+count, even after disabling auto-reactions or restarting the bot.
 
 Set `channel_id`, `threshold` (default 15), `emoji` (default ⭐),
 `allow_self_star` (default false) and `watch_channels` (`null` means all eligible
@@ -372,14 +399,95 @@ a moderator has since changed it. Recovery checks run every five seconds.
 The old `rates.low` field is preserved for compatibility but is not used;
 restoring each channel's actual prior rate avoids erasing manual settings.
 
+## Automatic moderation — `moderation`
+
+Open `/moderation settings` for the private Components V2 editor. Manage Server
+is required. Settings are stored per bot and server in the existing database;
+no additional table or migration is needed. New servers have moderation paused
+and no rules. Creating a rule leaves it disabled until you enable it.
+
+To prevent users replacing an old message with a link:
+
+1. **Add rule** and give it a name.
+2. Set **When** to **Message edited**, **Condition** to **Contains a link**,
+   and **Action** to **Delete message**. These are also the new-rule defaults.
+3. Optionally use **Channels & roles** to limit who and where it applies.
+4. **Enable rule**, return to **All rules**, then **Enable moderation**.
+
+Each of up to 20 rules has one event, condition and action:
+
+| Setting | Choices |
+| --- | --- |
+| When | Message sent, message edited, or both |
+| Condition | Any link, Discord invite, words/phrases, listed domains, attachments, or mention count |
+| Action | Delete message, delete + timeout, or log only |
+| Details | Name; words/domains one per line; mention limit; timeout minutes |
+| Channels & roles | Empty means all. Selected parent channels include threads; a member needs any selected role. Both scopes must match when both are set. |
+
+Words are literal, case-insensitive substrings, with Unicode normalization.
+They are not regular expressions. Domains match the exact host and subdomains;
+enter `example.com`, without a scheme, path or wildcard. There can be up to 50
+entries, each up to 100 characters, with 4,000 characters total including line
+breaks. The link condition also recognizes masked Markdown links and bare
+domains. It does not visit websites or classify images as NSFW. Attachments
+match any attached file, not only images. Mentions count distinct users plus
+roles; an everyone/here mention also matches.
+
+**Exceptions** applies to all rules: select exempt channels and roles, toggle
+staff exemption, and optionally check other bots/webhooks. By default,
+Administrator, Manage Server and Manage Messages holders are exempt, and bots
+and webhooks are ignored. The server owner and Caretaker itself are always
+exempt. Webhooks have no member roles and cannot match a role-scoped rule.
+
+**Logs** selects a staff channel. Logs contain member/message IDs, matched rule
+IDs and the result; they never repost the matched text, links or attachments,
+and they do not ping anyone. A channel is required to activate log-only rules.
+You can use log-only mode to observe a rule before changing its action. Changing
+a rule's condition disables that rule and clears its matching entries, so you
+can finish editing before enabling it again.
+
+Edits are fetched again from Discord, including old messages outside the bot's
+cache, with no age limit. Caretaker must be online to receive the edit and needs
+View Channel and Read Message History to fetch it. There is no scan of edits
+missed while offline, and private threads are checked only where Discord grants
+the bot access. The bot needs Manage Messages in watched channels to delete and
+Moderate Members plus a higher role to timeout. Timeout ranges from 1 minute to
+28 days. Multiple matching rules delete once and apply the longest requested
+timeout without shortening an existing longer timeout. A failed deletion does
+not trigger a timeout. Repeat events are deduplicated in the existing database.
+
+All editor controls belong to the administrator who opened them, expire after
+15 minutes, and reject stale changes if another administrator saved first.
+The same settings remain available through `/config` under `moderation`.
+
 ## Bot guard — `auto_ban_bots`
 
-Disabled by default. `watch_roles` must explicitly list quarantine roles;
-@everyone is ignored. `allowed_bot_ids` exempts trusted bots. Only bot accounts
-are considered; human members are never banned by this plugin.
-`delete_message_days` defaults to 0. `ban_check_interval_minutes` controls a
-periodic scan of cached members; new bot joins and role changes are checked
-directly. It does not fetch the whole server member list on each scan.
+Open `/botguard settings` for the private Components V2 editor (Manage Server).
+Add trusted account IDs through **Allowed accounts**, then choose whether to **Ban
+unapproved bot joins** and **Enable bot guard**. Both switches default to off.
+Join protection applies to future bot joins; it does not sweep installed bots.
+
+**Quarantine roles** selects `watch_roles` and the account scope. Choose **Bot
+accounts only** (`quarantine_targets: "bots"`, the compatibility default) or
+**All accounts** (`"all"`) to include regular members with any selected role.
+Changing the scope does not alter bot join protection: it still applies only
+to bot accounts. The server owner, Caretaker itself and allowed accounts are
+always exempt. The existing `allowed_bot_ids` field stores that allowlist for
+compatibility and accepts both member and bot IDs. Empty roles disable
+quarantine checks, and @everyone is ignored. Caretaker needs Ban Members and
+a higher role than the target account.
+
+**Options** edits `delete_message_days` (0–7, default 0) and
+`ban_check_interval_minutes` (1–1440, default 60). The interval applies only to
+quarantine scans; joins and role updates are checked immediately. This is a
+scan frequency, not a delay before banning. Scans page through the current
+member list, including uncached/offline members, and re-fetch each matching
+member before banning so a stale role assignment does not trigger a ban.
+No member scan runs when quarantine roles are empty or the plugin is paused.
+**Logs** sets `log_channel_id` for successful
+bans; failures are recorded in the process log. Existing quarantine settings
+remain compatible: `ban_on_join` defaults to false and `quarantine_targets`
+defaults to `"bots"`. A server must explicitly choose `"all"` to broaden role bans.
 
 ## Server-specific messages and permissions
 
@@ -397,5 +505,6 @@ and normal startup does not overwrite the bot's existing Discord profile.
 Grant only the permissions needed by the features you enable: View Channel,
 Send Messages, Read Message History, Embed Links and Attach Files as relevant;
 Manage Roles for role assignments; Manage Channels for ticket/voice/slowmode;
-Move Members for voice; Ban Members only for bot guard. Legacy ticket threads
+Move Members for voice; Manage Messages for moderation deletion, Moderate Members
+for moderation timeouts, and Ban Members for bot guard. Legacy ticket threads
 need Manage Threads to close. All command users need Use Application Commands.
