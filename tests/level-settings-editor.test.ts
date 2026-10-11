@@ -26,6 +26,7 @@ const starter = "400000000000000000";
 const milestone = "400000000000000005";
 const replacement = "400000000000000010";
 const destination = "500000000000000001";
+const commandDestination = "500000000000000002";
 let db: Database;
 beforeAll(async () => {
   db = await testDatabase();
@@ -70,6 +71,7 @@ async function fixture(
     enabled: false,
     reward_roles: rewards,
     reward_channel_id: destination,
+    command_channel_id: null,
     xp_gain: { min: 150, max: 250 },
     xp_cooldown_seconds: 60,
     reward_message: "Congratulations {user}, you reached level {level}!",
@@ -111,7 +113,13 @@ async function fixture(
       fetch: mock(async (id: string) => roles.get(id) ?? null),
     },
     channels: {
-      fetch: mock(async (id: string) => (id === destination ? channel : null)),
+      fetch: mock(async (id: string) =>
+        id === destination
+          ? channel
+          : id === commandDestination
+            ? { ...channel, id }
+            : null,
+      ),
     },
     members: {
       me: {
@@ -320,9 +328,123 @@ test("channel picker saves and disables announcements without changing XP or rew
   expect((await f.saved()).reward_channel_id).toBe(destination);
 });
 
+test("command channel can be set, changed and cleared without touching XP or announcements", async () => {
+  const f = await fixture();
+  const before = await f.saved();
+  await f.act("commands");
+  expect(componentText(f.payload())).toContain("Allowed anywhere");
+  expect(
+    controls(f.payload()).find((item) =>
+      String(item.custom_id).endsWith(":allow-anywhere"),
+    )?.disabled,
+  ).toBe(true);
+  const picker = controls(f.payload()).find(
+    (item) => item.type === ComponentType.ChannelSelect,
+  );
+  expect(picker?.channel_types).toEqual([
+    ChannelType.GuildText,
+    ChannelType.GuildAnnouncement,
+  ]);
+  await f.act("command-destination", "channel", [commandDestination]);
+  expect(await f.saved()).toEqual({
+    ...before,
+    command_channel_id: commandDestination,
+  });
+  expect(componentText(f.payload())).toContain(`<#${commandDestination}>`);
+  expect(
+    controls(f.payload()).find(
+      (item) => item.type === ComponentType.ChannelSelect,
+    )?.default_values,
+  ).toEqual([{ id: commandDestination, type: "channel" }]);
+  // Reopening reads the stored guild setting; no in-memory editor state is required.
+  await f.open();
+  expect(componentText(f.payload())).toContain(
+    `**Command channel:** <#${commandDestination}>`,
+  );
+  await f.act("commands");
+  await f.act("command-destination", "channel", [destination]);
+  expect(await f.saved()).toEqual({
+    ...before,
+    command_channel_id: destination,
+  });
+  await f.act("allow-anywhere");
+  expect(await f.saved()).toEqual(before);
+});
+
+test("command channel rejects missing, unsupported and inaccessible destinations", async () => {
+  const f = await fixture();
+  const before = await f.saved();
+  for (const values of [
+    [],
+    ["500000000000000099"],
+    [destination, commandDestination],
+  ]) {
+    await f.act("commands");
+    await f.act("command-destination", "channel", values);
+    expect(componentText(f.payload())).toContain("⚠️");
+    expect(await f.saved()).toEqual(before);
+  }
+  await f.act("commands");
+  f.channel.type = ChannelType.GuildVoice;
+  await f.act("command-destination", "channel", [destination]);
+  expect(componentText(f.payload())).toContain(
+    "Choose a server text or announcement channel",
+  );
+  expect(await f.saved()).toEqual(before);
+  await f.act("commands");
+  f.channel.type = ChannelType.GuildText;
+  f.channel.permissionsFor = () => new PermissionsBitField();
+  await f.act("command-destination", "channel", [destination]);
+  expect(componentText(f.payload())).toContain("cannot view or send");
+  expect(await f.saved()).toEqual(before);
+});
+
+test("command channel edits and removal reject concurrent changes and replayed controls", async () => {
+  const f = await fixture();
+  await f.act("commands");
+  const stalePicker = f.interaction(
+    controlId(f.payload(), "command-destination"),
+    "channel",
+    [destination],
+  );
+  await f.settings.patch(guildId, "levels", levelsSchema, {
+    command_channel_id: commandDestination,
+  });
+  await f.send(stalePicker);
+  expect((await f.saved()).command_channel_id).toBe(commandDestination);
+  expect(componentText(f.payload())).toContain("Settings changed");
+  await expect(f.send(stalePicker)).rejects.toThrow("outdated");
+  await f.act("commands");
+  const staleClear = f.interaction(controlId(f.payload(), "allow-anywhere"));
+  await f.settings.patch(guildId, "levels", levelsSchema, {
+    command_channel_id: destination,
+  });
+  await f.send(staleClear);
+  expect((await f.saved()).command_channel_id).toBe(destination);
+  expect(componentText(f.payload())).toContain("Settings changed");
+});
+
+test("restricted channels never lock an admin out of the settings editor", async () => {
+  const f = await fixture();
+  await f.settings.patch(guildId, "levels", levelsSchema, {
+    command_channel_id: commandDestination,
+  });
+  const interaction = {
+    ...f.base,
+    channelId: destination,
+    options: {
+      getSubcommandGroup: () => null,
+      getSubcommand: () => "settings",
+    },
+  } as unknown as ChatInputCommandInteraction<"cached">;
+  await levelsPlugin.commands?.[0]?.execute(f.context, interaction);
+  expect(componentText(f.payload())).toContain("Level settings");
+  expect(componentText(f.payload())).toContain(`<#${commandDestination}>`);
+});
+
 test("only the owning admin in the same bot and server can use an unexpired panel", async () => {
   const f = await fixture();
-  const id = controlId(f.payload(), "channel");
+  const id = controlId(f.payload(), "commands");
   const invalid = [
     { user: { id: "another-admin" } },
     { guildId: "another-guild" },
@@ -398,15 +520,15 @@ test("all 100 rewards are editable through pagination and refresh reloads slash 
 
 test("one panel exposes all level sections with buttons and no separate setup command links", async () => {
   const f = await fixture();
-  for (const action of ["home", "channel", "xp", "home"]) {
+  for (const action of ["home", "channel", "xp", "commands", "home"]) {
     await f.act(action);
     expect(
       controls(f.payload()).filter((control) =>
-        ["Rewards", "Announcements", "XP settings"].includes(
+        ["Rewards", "Announcements", "XP settings", "Commands"].includes(
           String(control.label),
         ),
       ),
-    ).toHaveLength(3);
+    ).toHaveLength(4);
     expect(componentText(f.payload())).not.toContain("/level rewards");
     expect(componentText(f.payload())).not.toContain("/config");
     expect(wire(f.payload()).allowedMentions).toEqual({
@@ -420,6 +542,10 @@ test("one panel exposes all level sections with buttons and no separate setup co
     expect(
       rows.filter((row) => row.type === ComponentType.ActionRow).length,
     ).toBeLessThanOrEqual(3);
+    for (const row of rows.filter(
+      (row) => row.type === ComponentType.ActionRow,
+    ))
+      expect(row.components?.length).toBeLessThanOrEqual(5);
   }
 });
 

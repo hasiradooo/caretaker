@@ -142,6 +142,63 @@ test("leaderboard shows names in rank order and survives an unavailable member",
   expect(text).not.toContain("<@");
 });
 
+test.each([
+  "rank",
+  "leaderboard",
+])("%s respects the dedicated channel and allows all channels when cleared", async (action) => {
+  const commandChannelId = "400000000000000001";
+  const query = mock(async () => [
+    { user_id: userId, rank: 1, level: 0, xp: 19 },
+  ]);
+  let config = levelsSchema.parse({
+    enabled: true,
+    command_channel_id: commandChannelId,
+  });
+  const context = {
+    botId: "bot",
+    settings: { get: async () => config },
+    db: { query },
+  } as unknown as Context;
+  const editReply = mock(async (_payload: unknown) => undefined);
+  const interaction = {
+    guildId: "guild",
+    guild,
+    user,
+    channelId: "400000000000000002",
+    memberPermissions: new PermissionsBitField(PermissionFlagsBits.ManageGuild),
+    options: {
+      getSubcommandGroup: () => null,
+      getUser: () => null,
+      getSubcommand: () => action,
+      getInteger: () => 1,
+    },
+    editReply,
+  };
+  const command = levelsPlugin.commands?.[0];
+  if (!command) throw new Error("Level command is missing");
+  const execute = (overrides = {}) =>
+    command.execute(context, {
+      ...interaction,
+      ...overrides,
+    } as unknown as ChatInputCommandInteraction<"cached">);
+  await expect(execute()).rejects.toThrow(
+    `Use <#${commandChannelId}> for level commands.`,
+  );
+  await expect(
+    execute({ channel: { isThread: () => true, parentId: commandChannelId } }),
+  ).rejects.toThrow(commandChannelId);
+  expect(query).not.toHaveBeenCalled();
+  expect(editReply).not.toHaveBeenCalled();
+  await execute({ channelId: commandChannelId });
+  expect(editReply).toHaveBeenCalledTimes(1);
+  expect(editReply.mock.calls[0]?.[0]).toMatchObject({
+    flags: MessageFlags.IsComponentsV2,
+  });
+  config = { ...config, command_channel_id: null };
+  await execute();
+  expect(editReply).toHaveBeenCalledTimes(2);
+});
+
 test("names fall back to global display names and cannot become Markdown or mention tokens", async () => {
   const profile = await levelProfile(
     guild as unknown as Guild,
@@ -200,6 +257,8 @@ function levelUpScenario(rewardChannelId: string | null, canSend = true) {
           levelsSchema.parse({
             enabled: true,
             reward_channel_id: rewardChannelId,
+            // Restrict commands without restricting normal message XP or announcements.
+            command_channel_id: "400000000000000009",
             reward_message:
               "Congrats {user} / {display_name}! @everyone <@300000000000000099>",
             xp_gain: { min: 15, max: 15 },

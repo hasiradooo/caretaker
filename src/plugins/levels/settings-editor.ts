@@ -39,6 +39,7 @@ type View =
   | "reward"
   | "add"
   | "channel"
+  | "commands"
   | "xp"
   | "modal"
   | "add-modal"
@@ -181,9 +182,11 @@ export class LevelSettingsEditor {
     const active =
       session.view === "channel"
         ? "channel"
-        : session.view === "xp"
-          ? "xp"
-          : "home";
+        : session.view === "commands"
+          ? "commands"
+          : session.view === "xp"
+            ? "xp"
+            : "home";
     // Keep navigation on the same message, even while editing an individual role.
     const actions: ActionRowBuilder<MessageActionRowComponentBuilder>[] = [
       row(
@@ -203,10 +206,10 @@ export class LevelSettingsEditor {
           active === "xp" ? ButtonStyle.Primary : ButtonStyle.Secondary,
         ).setDisabled(active === "xp"),
         button(
-          "toggle",
-          session.config.enabled ? "Pause levels" : "Enable levels",
-        ),
-        button("refresh", "Refresh"),
+          "commands",
+          "Commands",
+          active === "commands" ? ButtonStyle.Primary : ButtonStyle.Secondary,
+        ).setDisabled(active === "commands"),
       ),
     ];
     let title = "Level settings";
@@ -215,6 +218,9 @@ export class LevelSettingsEditor {
     const channel = session.config.reward_channel_id
       ? `<#${session.config.reward_channel_id}>`
       : "Off — no announcement channel";
+    const commandChannel = session.config.command_channel_id
+      ? `<#${session.config.command_channel_id}>`
+      : "Allowed anywhere";
 
     if (session.view === "add") {
       title = "Add level reward";
@@ -280,6 +286,27 @@ export class LevelSettingsEditor {
           ),
         ),
       );
+    } else if (session.view === "commands") {
+      title = "Level command channel";
+      body = `**Rank and leaderboard:** ${commandChannel}`;
+      details =
+        "Choose where members can use `/level rank` and `/level leaderboard`. Attempts elsewhere point them to the selected channel. Threads are separate channels and are not included.\nAdmins can still manage levels from other channels. Message XP and level-up announcements use their own settings.";
+      const picker = new ChannelSelectMenuBuilder()
+        .setCustomId(customId("command-destination"))
+        .setPlaceholder("Choose the channel for level commands")
+        .setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+        .setMinValues(1)
+        .setMaxValues(1);
+      if (session.config.command_channel_id)
+        picker.setDefaultChannels(session.config.command_channel_id);
+      actions.push(
+        row(picker),
+        row(
+          button("allow-anywhere", "Allow anywhere").setDisabled(
+            !session.config.command_channel_id,
+          ),
+        ),
+      );
     } else if (session.view === "xp") {
       title = "XP settings";
       body = `**XP per message:** ${session.config.xp_gain.min}–${session.config.xp_gain.max}\n**Cooldown:** ${session.config.xp_cooldown_seconds} seconds`;
@@ -289,7 +316,7 @@ export class LevelSettingsEditor {
         row(button("edit-xp", "Edit XP settings", ButtonStyle.Primary)),
       );
     } else {
-      body = `**Level-up channel:** ${channel}\n**Rewards:** ${rewards.length}/${MAX_LEVEL_REWARDS}`;
+      body = `**Level-up channel:** ${channel}\n**Command channel:** ${commandChannel}\n**Rewards:** ${rewards.length}/${MAX_LEVEL_REWARDS}`;
       const page = rewards.slice(
         session.page * PAGE_SIZE,
         (session.page + 1) * PAGE_SIZE,
@@ -333,6 +360,17 @@ export class LevelSettingsEditor {
         ),
       );
     }
+    // Each view ends with a button row. Keep shared controls there so navigation
+    // stays within five buttons and the whole editor stays within three rows.
+    actions
+      .at(-1)
+      ?.addComponents(
+        button(
+          "toggle",
+          session.config.enabled ? "Pause levels" : "Enable levels",
+        ),
+        button("refresh", "Refresh"),
+      );
     return card({
       title,
       icon: "⚙️",
@@ -623,19 +661,26 @@ export class LevelSettingsEditor {
         notice = "✓ Level-up message saved.";
       } else if (
         interaction.isChannelSelectMenu() &&
-        action === "destination" &&
-        session.view === "channel"
+        ((action === "destination" && session.view === "channel") ||
+          (action === "command-destination" && session.view === "commands"))
       ) {
         const channelId = interaction.values[0];
-        if (!channelId) throw new UserError("Choose one announcement channel.");
+        if (!channelId || interaction.values.length !== 1)
+          throw new UserError("Choose one channel.");
         const channel = await sendableChannel(interaction.guild, channelId);
         if (
           channel.type !== ChannelType.GuildText &&
           channel.type !== ChannelType.GuildAnnouncement
         )
           throw new UserError("Choose a server text or announcement channel.");
-        patch = { reward_channel_id: channel.id };
-        notice = "✓ Level-up channel saved.";
+        patch =
+          session.view === "commands"
+            ? { command_channel_id: channel.id }
+            : { reward_channel_id: channel.id };
+        notice =
+          session.view === "commands"
+            ? "✓ Rank and leaderboard are now restricted to the selected channel."
+            : "✓ Level-up channel saved.";
       } else if (interaction.isButton()) {
         if (action === "remove" && session.view === "reward") {
           const selected = this.selected(session);
@@ -651,9 +696,13 @@ export class LevelSettingsEditor {
           patch = { reward_channel_id: null };
           notice =
             "✓ Level-up announcements are off. XP and role rewards are unchanged.";
+        } else if (action === "allow-anywhere" && session.view === "commands") {
+          patch = { command_channel_id: null };
+          notice = "✓ Rank and leaderboard can now be used in any channel.";
         } else if (
           action === "home" ||
           action === "channel" ||
+          action === "commands" ||
           action === "xp"
         ) {
           next.view = action;

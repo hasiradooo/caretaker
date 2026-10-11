@@ -60,7 +60,7 @@ export function createHelpCommand(plugins: Plugin[]): Command {
             "`/config enable` / `/config disable` — control a feature",
             "`/welcome settings` / `/goodbye settings` — open the greeting editor",
             "`/welcome set` / `/goodbye set` — choose a channel and enable greetings",
-            "`/level settings` — manage rewards, announcements and XP from one panel",
+            "`/level settings` — manage rewards, announcements, XP and the command channel",
             "`/birthday settings` — edit birthday messages, channel and schedule",
             "`/ticket settings` — edit ticket channels, staff roles, panel and auto-close",
             "`/starboard settings` — edit highlight channel, emoji, threshold and watched channels",

@@ -47,9 +47,11 @@ control a feature. `/level rank` and `/level leaderboard` reply publicly; other
 commands reply privately. Ranks and leaderboards use display names without
 pinging members. Level-up announcements mention the member in the configured
 channel. Open `/level settings` for one private editor with
-**Rewards**, **Announcements**, and **XP settings** buttons. Add and edit rewards
+**Rewards**, **Announcements**, **XP settings**, and **Commands** buttons. Add and edit rewards
 (including level 0), set the announcement channel/text, adjust XP gain/cooldown,
-and enable or pause levels without separate setup commands.
+and enable or pause levels without separate setup commands. Under **Commands**,
+choose a dedicated channel for rank and leaderboard, or use **Allow anywhere**
+to remove the restriction. Admin setup commands still work in other channels.
 Members retain only the roles at their highest unlocked milestone. Rewards update on the next XP award
 or admin XP change. Greetings, panels and announcements go to their
 configured channels.

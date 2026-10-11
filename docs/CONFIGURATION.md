@@ -58,7 +58,7 @@ fallback to the conversation channel. Open `/level settings`, choose
 ### Level settings editor
 
 `/level settings` opens one private Components V2 editor for admins with Manage
-Server. Its **Rewards**, **Announcements**, and **XP settings** buttons remain
+Server. Its **Rewards**, **Announcements**, **XP settings**, and **Commands** buttons remain
 visible throughout setup, so no separate setup commands or pasted IDs are needed.
 
 - **Rewards:** choose **Add reward**, select a role, then **Set level & save**.
@@ -71,6 +71,13 @@ visible throughout setup, so no separate setup commands or pasted IDs are needed
 - **XP settings:** edit minimum/maximum XP per message and cooldown together in
   one form. Changes affect future awards; saved progress, multipliers and ignored
   roles/channels remain unchanged.
+- **Commands:** choose one text or announcement channel for `/level rank` and
+  `/level leaderboard`, or select **Allow anywhere** to clear the restriction.
+  This saves `command_channel_id`; `null` (the default) permits all channels.
+  The channel must be visible and writable by the bot. Other channels, including
+  threads under the selected channel, are rejected with a link to the chosen
+  channel. Admin settings, reward management and XP edits remain available
+  elsewhere. Message XP and level-up announcements are not affected.
 
 **Enable levels** / **Pause levels** and **Refresh** are available in every
 section. Pausing keeps members' saved XP and current roles. Changes save when a
