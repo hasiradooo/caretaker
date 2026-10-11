@@ -64,6 +64,8 @@ export function createHelpCommand(plugins: Plugin[]): Command {
             "`/birthday settings` — edit birthday messages, channel and schedule",
             "`/ticket settings` — edit ticket channels, staff roles, panel and auto-close",
             "`/starboard settings` — edit highlight channel, emoji, threshold and watched channels",
+            "`/moderation settings` — build rules for message edits, links, attachments and more",
+            "`/botguard settings` — quarantine role bans, account scope, allowed accounts and bot join protection",
             "`/roles` / `/ticket panel` — publish configured panels",
           ].join("\n"),
         );

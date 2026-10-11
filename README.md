@@ -39,7 +39,8 @@ duplicate starts and expires after two minutes if a process crashes.
 | `starboard` | Reaction highlights, an admin editor and private previews | `/starboard settings` (also `status`, `channel`, `threshold`, `emoji`, `enable`, `disable`) |
 | `tempvc` | Join-to-create voice channels and empty-room cleanup | `/config` |
 | `slowmode` | Temporary slowmode based on activity; restores the prior rate | `/config` |
-| `auto_ban_bots` | Bot-only moderation for explicitly configured quarantine roles | `/config` |
+| `moderation` | Custom rules for new messages and edits, with exceptions and action logs | `/moderation settings` |
+| `auto_ban_bots` | Quarantine role bans for bots or all accounts, allowlist and optional bot join bans | `/botguard settings` |
 
 `/config` requires Manage Server permission. Use `/config view` to inspect and
 edit settings, `/config set` for one field, and `/config enable` or `disable` to
@@ -55,6 +56,19 @@ to remove the restriction. Admin setup commands still work in other channels.
 Members retain only the roles at their highest unlocked milestone. Rewards update on the next XP award
 or admin XP change. Greetings, panels and announcements go to their
 configured channels.
+
+Open `/moderation settings` to build rules using **When → Condition → Action**.
+For example, choose **Message edited → Contains a link → Delete message** to
+check edits even to old, uncached messages. You can also match invites, chosen
+words or domains, attachments and mention counts; restrict rules to channels or
+roles; and choose deletion, deletion with a timeout, or logging only. New rules
+and moderation start disabled. Settings are saved separately for each server.
+`/botguard settings` manages quarantine role bans for bot accounts or all members,
+with an allowlist and a separate switch for future bot joins. Quarantine scope
+defaults to bots only; choose **All accounts** to include regular members.
+Role changes trigger immediate checks; periodic scans also cover uncached members.
+Neither editor enables protection
+until an administrator chooses it.
 
 ## Make it yours
 
@@ -86,6 +100,15 @@ Discord's [application description guide](https://github.com/discord/discord-api
 documents the 400-character profile description limit.
 
 ## Development and deployment
+
+Logs use readable local timestamps, level labels and indented details by default.
+Interactive terminals show colors; redirected output stays free of color codes.
+Set `LOG_FORMAT=json` for structured log collectors, or `LOG_FORMAT=auto` to use
+readable logs in a terminal and JSON when redirected. `LOG_TIMEZONE=Europe/Warsaw`
+overrides the computer timezone for readable timestamps; JSON timestamps remain
+UTC. `LOG_LEVEL` filters verbosity, and `NO_COLOR=1` disables colors.
+Successful moderation actions report account/server details separately from real
+errors. Configured secrets are redacted in both formats, including nested details.
 
 ```sh
 bun run dev       # Restart on source changes; connects to your configured bot/database
