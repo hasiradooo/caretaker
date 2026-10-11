@@ -214,7 +214,9 @@ Open `/ticket settings` for one private Components V2 editor with these tabs:
 - **Channels**: choose the private-thread parent channel, support-panel destination, staff alerts
   and private transcripts. Each picker checks channel type and bot permissions.
 - **Staff roles**: add or remove selected roles without replacing the rest of the list.
-  Current staff members are added to new private threads. Existing ticket memberships
+  Staff choose **Join ticket** in the staff alert instead of being added automatically.
+  Configure a staff alerts channel so staff without Manage Threads can join on demand.
+  Existing ticket memberships
   are unchanged. Staff roles are mentioned only in the staff-alert channel; only
   configured roles can be pinged. Ticket introductions contain no staff tags and
   never fall back to notifying staff inside the thread. Non-mentionable roles require
@@ -240,7 +242,12 @@ optional `transcript_channel_id`. Publish `/ticket panel` or use `/ticket open`.
 Customize `panel.title`, `panel.message` and `panel.button_label` in the editor.
 New tickets are private threads in a server text channel. `parent_channel_id`
 falls back to `panel_channel_id` when unset. The bot creates and owns the thread,
-with member invitations disabled, and adds the opener plus current staff members.
+with member invitations disabled, and adds only the opener. Staff are not automatically
+subscribed to tickets. The **Join ticket** button on a staff alert adds only the staff
+member who clicks it, after checking their current roles and channel permissions.
+It does not claim the ticket or reset its inactivity timer. The button also works
+for ongoing tickets while new ticket creation is paused. Closed/locked tickets
+cannot be joined through it.
 The bot needs View Channel, Read Message History, Create Private Threads,
 Send Messages in Threads and Manage Threads in the parent. Participants need
 View Channel and Send Messages in Threads there. Discord members with Manage

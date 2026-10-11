@@ -1,4 +1,7 @@
 import {
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
   ChannelType,
   type GuildMember,
   PermissionFlagsBits,
@@ -9,7 +12,6 @@ import { noMentions, sendableChannel } from "../../shared/discord";
 import { UserError } from "../../shared/errors";
 import { card } from "../../shared/messages";
 import { KeyedQueue } from "../../shared/serial";
-import { isTicketStaff } from "./access";
 import { removeClosedTicketAlert } from "./alerts";
 import type { TicketSettings } from "./config";
 import { ticketLabel, ticketThreadName } from "./presentation";
@@ -73,18 +75,6 @@ async function openPrivateTicket(
   const roleIds = [...new Set(config.mods_role_ids)];
   for (const id of roleIds) await ticketStaffRole(member.guild, id);
 
-  // Private threads cannot grant access to a role. Fetch the complete roster,
-  // then add only the opener and current staff members, never the whole server.
-  const roster = await member.guild.members.fetch();
-  const staff = roster.filter(
-    (candidate) => !candidate.user.bot && isTicketStaff(candidate, config),
-  );
-  for (const candidate of staff.values()) {
-    if (!parent.permissionsFor(candidate)?.has(participantPermissions))
-      throw new UserError(
-        "Ticket staff need View Channel and Send Messages in Threads in the support channel. Ask an administrator to update its permissions.",
-      );
-  }
   const thread = await parent.threads.create({
     name: `ticket-${member.user.username.replace(/[^a-z0-9-]/gi, "").slice(0, 30) || "member"}`,
     type: ChannelType.PrivateThread,
@@ -93,9 +83,9 @@ async function openPrivateTicket(
     reason: "Member opened a private support ticket",
   });
   try {
-    for (const id of new Set([member.id, ...staff.keys()])) {
-      if (id !== context.botId) await thread.members.add(id);
-    }
+    // Invite only the opener. Staff choose Join ticket in the alert instead of
+    // being subscribed to every new ticket's messages automatically.
+    if (member.id !== context.botId) await thread.members.add(member.id);
   } catch (error) {
     await thread
       .delete("Ticket setup failed")
@@ -161,7 +151,16 @@ async function openPrivateTicket(
           icon: "📬",
           body: `${staffLine}\n\n<@${member.id}> opened <#${thread.id}>.`,
           sections: [`### Topic\n${topic}`],
-          footer: "Staff: use /ticket claim or /ticket close inside the thread",
+          actions: [
+            new ActionRowBuilder<ButtonBuilder>().addComponents(
+              new ButtonBuilder()
+                .setCustomId(`tickets:join:${thread.id}`)
+                .setLabel("Join ticket")
+                .setStyle(ButtonStyle.Primary),
+            ),
+          ],
+          footer:
+            "Join when you want to help, then use /ticket claim or /ticket close inside the thread",
         }),
         // Never allow topic text to ping unrelated users, roles or @everyone.
         allowedMentions: { ...noMentions, roles: roleIds },

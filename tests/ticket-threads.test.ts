@@ -493,7 +493,7 @@ test("publishing an older archive snapshot cannot swallow a concurrently submitt
   expect(await repository.pending(f.guildId)).toHaveLength(0);
 });
 
-test("simultaneous opens create one private, non-invitable thread for only the opener and staff", async () => {
+test("simultaneous opens create one private thread without automatically adding staff or admins", async () => {
   const f = await fixture();
   const ids = await Promise.all(Array.from({ length: 8 }, () => f.open()));
   expect(new Set(ids).size).toBe(1);
@@ -505,11 +505,185 @@ test("simultaneous opens create one private, non-invitable thread for only the o
   expect(f.guild.channels.create).not.toHaveBeenCalled();
   const thread = required(f.created[0]);
   expect(new Set(thread.members.add.mock.calls.map((call) => call[0]))).toEqual(
-    new Set([openerId, staffId, adminId]),
+    new Set([openerId]),
   );
+  expect(f.guild.members.fetch).not.toHaveBeenCalled();
   expect(thread.send).toHaveBeenCalledTimes(1);
   expect(f.alerts.send).toHaveBeenCalledTimes(1);
   expect(await f.repository.open(f.guildId, openerId)).toHaveLength(1);
+});
+
+function joinButton(
+  f: Awaited<ReturnType<typeof fixture>>,
+  threadId: string,
+  userId = staffId,
+) {
+  return {
+    customId: `tickets:join:${threadId}`,
+    guildId: f.guildId,
+    guild: f.guild,
+    channelId: alertsId,
+    user: { id: userId },
+    member: f.roster.get(userId),
+    message: { id: "700000000000000001", author: { id: botId } },
+    isButton: () => true,
+    isMessageComponent: () => true,
+    isModalSubmit: () => false,
+    deferReply: mock(async (_payload: unknown) => {}),
+    editReply: mock(async (_payload: unknown) => {}),
+  };
+}
+
+for (const userId of [staffId, adminId]) {
+  test(`staff ${userId} join only when they choose the alert button, without claiming or notifying`, async () => {
+    const f = await fixture();
+    const id = await f.open();
+    const thread = required(f.created[0]);
+    const before = await f.repository.get(f.guildId, id);
+    const payload = JSON.stringify(f.alerts.send.mock.calls[0]?.[0]);
+    expect(payload).toContain(`"custom_id":"tickets:join:${id}"`);
+    expect(payload).toContain('"label":"Join ticket"');
+    expect(thread.members.add.mock.calls).toEqual([[openerId]]);
+    const interaction = joinButton(f, id, userId);
+    await ticketsPlugin.component?.(
+      f.context,
+      interaction as unknown as ButtonInteraction<"cached">,
+    );
+    expect(thread.members.add.mock.calls).toEqual([[openerId], [userId]]);
+    expect(f.guild.members.fetch).toHaveBeenCalledWith({
+      user: userId,
+      force: true,
+    });
+    expect(interaction.deferReply).toHaveBeenCalledWith({
+      flags: MessageFlags.Ephemeral,
+    });
+    expect(componentText(interaction.editReply.mock.calls[0]?.[0])).toContain(
+      `<#${id}>`,
+    );
+    expect(await f.repository.get(f.guildId, id)).toEqual(before);
+    expect(thread.send).toHaveBeenCalledTimes(1);
+    expect(f.alerts.send).toHaveBeenCalledTimes(1);
+  });
+}
+
+test("staff can join an auto-archived ongoing ticket from its original alert while tickets are paused", async () => {
+  const f = await fixture();
+  const id = await f.open();
+  const thread = required(f.created[0]);
+  thread.archived = true;
+  await f.context.settings.patch(f.guildId, "tickets", ticketsSchema, {
+    enabled: false,
+    admin_channel_id: "400000000000000099",
+  });
+  await ticketsPlugin.component?.(
+    f.context,
+    joinButton(f, id) as unknown as ButtonInteraction<"cached">,
+  );
+  expect(thread.archived).toBe(false);
+  expect(thread.members.add.mock.calls).toEqual([[openerId], [staffId]]);
+});
+
+for (const userId of [openerId, otherId]) {
+  test(`non-staff ${userId} cannot use a staff join button`, async () => {
+    const f = await fixture();
+    const id = await f.open();
+    const interaction = joinButton(f, id, userId);
+    await expect(
+      ticketsPlugin.component?.(
+        f.context,
+        interaction as unknown as ButtonInteraction<"cached">,
+      ),
+    ).rejects.toThrow("Only ticket staff");
+    expect(interaction.deferReply).toHaveBeenCalledWith({
+      flags: MessageFlags.Ephemeral,
+    });
+    expect(f.created[0]?.members.add.mock.calls).toEqual([[openerId]]);
+  });
+}
+
+test("a revoked staff role cannot join using a stale interaction member", async () => {
+  const f = await fixture();
+  const id = await f.open();
+  const interaction = joinButton(f, id);
+  const member = required(f.roster.get(staffId));
+  f.roster.set(staffId, {
+    ...member,
+    roles: { cache: new Collection() },
+  } as unknown as GuildMember);
+  await expect(
+    ticketsPlugin.component?.(
+      f.context,
+      interaction as unknown as ButtonInteraction<"cached">,
+    ),
+  ).rejects.toThrow("Only ticket staff");
+  expect(f.created[0]?.members.add.mock.calls).toEqual([[openerId]]);
+});
+
+for (const scenario of [
+  "malformed",
+  "other-author",
+  "other-message",
+  "other-channel",
+  "other-guild",
+  "other-bot",
+  "closed",
+  "missing",
+  "locked",
+  "public",
+  "denied",
+] as const) {
+  test(`staff join rejects ${scenario} tickets or buttons without granting access`, async () => {
+    const f = await fixture();
+    const id = await f.open();
+    const thread = required(f.created[0]);
+    const interaction = joinButton(f, id);
+    if (scenario === "malformed") interaction.customId = "tickets:join:invalid";
+    if (scenario === "other-author") interaction.message.author.id = otherId;
+    if (scenario === "other-message")
+      interaction.message.id = "700000000000000099";
+    if (scenario === "other-channel") interaction.channelId = parentId;
+    if (scenario === "other-guild") interaction.guildId = "200000000000000099";
+    if (scenario === "other-bot") {
+      f.context.botId = "100000000000000099";
+      interaction.message.author.id = f.context.botId;
+    }
+    if (scenario === "closed")
+      await f.repository.close(f.guildId, id, staffId, "Done");
+    if (scenario === "missing") f.channels.delete(id);
+    if (scenario === "locked") thread.locked = true;
+    if (scenario === "public") thread.type = ChannelType.PublicThread;
+    if (scenario === "denied")
+      thread.permissionsFor.mockReturnValue(new PermissionsBitField());
+    await expect(
+      ticketsPlugin.component?.(
+        f.context,
+        interaction as unknown as ButtonInteraction<"cached">,
+      ),
+    ).rejects.toThrow();
+    expect(thread.members.add.mock.calls).toEqual([[openerId]]);
+    expect(thread.setArchived).not.toHaveBeenCalled();
+    expect(interaction.editReply).not.toHaveBeenCalled();
+  });
+}
+
+test("failed manual staff invitations preserve the ticket and can be retried", async () => {
+  const f = await fixture();
+  const id = await f.open();
+  const thread = required(f.created[0]);
+  thread.members.add.mockRejectedValueOnce(new Error("Discord unavailable"));
+  await expect(
+    ticketsPlugin.component?.(
+      f.context,
+      joinButton(f, id) as unknown as ButtonInteraction<"cached">,
+    ),
+  ).rejects.toThrow("Discord unavailable");
+  expect((await f.repository.get(f.guildId, id))?.status).toBe("open");
+  expect(thread.delete).not.toHaveBeenCalled();
+  await ticketsPlugin.component?.(
+    f.context,
+    joinButton(f, id) as unknown as ButtonInteraction<"cached">,
+  );
+  expect(thread.members.add).toHaveBeenLastCalledWith(staffId);
 });
 
 test("staff tags appear only in alerts, and the thread can mention only its opener", async () => {
@@ -840,11 +1014,11 @@ test("failed participant setup removes the incomplete thread and never reserves 
   f.parent.threads.create.mockImplementation(async (options) => {
     const thread = await original(options);
     thread.members.add.mockImplementation(async (id) => {
-      if (id === staffId) throw new Error("Cannot invite staff");
+      if (id === openerId) throw new Error("Cannot invite opener");
     });
     return thread;
   });
-  await expect(f.open()).rejects.toThrow("Cannot invite staff");
+  await expect(f.open()).rejects.toThrow("Cannot invite opener");
   expect(required(f.created[0]).delete).toHaveBeenCalledTimes(1);
   expect(await f.repository.open(f.guildId, openerId)).toHaveLength(0);
   expect(f.alerts.send).not.toHaveBeenCalled();
@@ -887,7 +1061,7 @@ test("a competing database winner is reused and only the losing thread is remove
   expect(f.alerts.send).not.toHaveBeenCalled();
 });
 
-test("invalid parent or inaccessible staff abort before creating a thread", async () => {
+test("invalid parent or inaccessible opener abort before creating a thread", async () => {
   const f = await fixture();
   f.parent.type = ChannelType.GuildCategory;
   await expect(f.open()).rejects.toThrow("server text channel");
@@ -895,10 +1069,10 @@ test("invalid parent or inaccessible staff abort before creating a thread", asyn
   f.parent.permissionsFor.mockImplementation(
     (member) =>
       new PermissionsBitField(
-        member.id === staffId ? [] : PermissionsBitField.All,
+        member.id === openerId ? [] : PermissionsBitField.All,
       ),
   );
-  await expect(f.open()).rejects.toThrow("Ticket staff need");
+  await expect(f.open()).rejects.toThrow("You need View Channel");
   expect(f.parent.threads.create).not.toHaveBeenCalled();
 });
 

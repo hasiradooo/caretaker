@@ -208,7 +208,7 @@ export class TicketSettingsEditor extends SettingsEditor<
       sections.push(
         exempt
           ? "Tickets opened by members with these roles will not close automatically."
-          : "Members with these roles are added to new private ticket threads and mentioned only in the staff alerts channel. Only ticket staff can claim or close tickets. Existing tickets keep their membership; Manage Server members can also use staff commands.",
+          : "Staff are not added to tickets automatically. Configure a staff alerts channel so members with these roles can choose Join ticket. Staff roles are mentioned only in that channel. Only ticket staff can claim or close tickets; Manage Server members can also join and use staff commands. Existing ticket memberships are unchanged.",
       );
       actions.push(
         editorRow(
