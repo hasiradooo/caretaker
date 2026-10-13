@@ -1,0 +1,59 @@
+name: Deploy
+on:
+    workflow_run:
+        workflows: [Check]
+        branches: [main]
+        types: [completed]
+
+permissions:
+    contents: read
+
+concurrency:
+    group: caretaker-production
+    cancel-in-progress: false
+
+jobs:
+    deploy:
+        # Keep disabled until the Linux host and SSH secrets are configured.
+        if: >-
+            vars.DEPLOY_ENABLED == 'true' &&
+            github.event.workflow_run.conclusion == 'success' &&
+            github.event.workflow_run.event == 'push' &&
+            github.event.workflow_run.head_branch == 'main' &&
+            github.event.workflow_run.head_repository.full_name == github.repository
+        runs-on: ubuntu-latest
+        timeout-minutes: 20
+        steps:
+            - name: Deploy validated main commit over SSH
+              shell: bash
+              env:
+                  DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+                  DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+                  DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+                  DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+                  DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '22' }}
+                  DEPLOY_SHA: ${{ github.event.workflow_run.head_sha }}
+              run: |
+                  set -Eeuo pipefail
+                  : "${DEPLOY_HOST:?Set DEPLOY_HOST}"
+                  : "${DEPLOY_USER:?Set DEPLOY_USER}"
+                  : "${DEPLOY_SSH_KEY:?Set DEPLOY_SSH_KEY}"
+                  : "${DEPLOY_KNOWN_HOSTS:?Set DEPLOY_KNOWN_HOSTS}"
+                  [[ "$DEPLOY_HOST" =~ ^[a-zA-Z0-9][a-zA-Z0-9.:-]*$ ]]
+                  [[ "$DEPLOY_USER" =~ ^[a-zA-Z_][a-zA-Z0-9_-]*$ ]]
+                  [[ "$DEPLOY_PORT" =~ ^[0-9]{1,5}$ ]]
+                  [[ "$DEPLOY_SHA" =~ ^[0-9a-f]{40}$ ]]
+                  umask 077
+                  ssh_dir="$(mktemp -d)"
+                  trap 'rm -rf -- "$ssh_dir"' EXIT
+                  printf '%s\n' "$DEPLOY_SSH_KEY" > "$ssh_dir/key"
+                  printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$ssh_dir/known_hosts"
+                  # Only a validated hexadecimal SHA enters the remote command.
+                  timeout 18m ssh -T -i "$ssh_dir/key" -p "$DEPLOY_PORT" \
+                      -o BatchMode=yes -o IdentitiesOnly=yes \
+                      -o StrictHostKeyChecking=yes \
+                      -o UserKnownHostsFile="$ssh_dir/known_hosts" \
+                      -o ConnectTimeout=20 -o ServerAliveInterval=15 \
+                      -o ServerAliveCountMax=3 \
+                      "$DEPLOY_USER@$DEPLOY_HOST" \
+                      "cd \"\$HOME/caretaker\" && bash deploy/update.sh '$DEPLOY_SHA'"
