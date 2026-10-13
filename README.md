@@ -125,6 +125,8 @@ they do not connect to your live services. A Discord test-server smoke test is
 still needed before public use. Start commands from the repository root so the
 migrations and certificate paths resolve consistently.
 
+For automatic updates from main on Linux, follow the [GitHub deployment guide](docs/LINUX_DEPLOYMENT.md).
+
 For Docker, follow the [build and run guide](docs/DOCKER.md). With your existing
 `.env`, certificate and database ready, stop any local bot process and run:
 

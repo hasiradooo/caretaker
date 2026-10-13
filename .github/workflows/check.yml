@@ -13,4 +13,6 @@ jobs:
         with:
           bun-version: 1.4.0
       - run: bun install --frozen-lockfile
+      - run: bash -n deploy/update.sh deploy/test-update.sh
+      - run: bash deploy/test-update.sh
       - run: bun run validate
