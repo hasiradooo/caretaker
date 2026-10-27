@@ -11,15 +11,28 @@ export const counterKinds = [
     "staff_online",
 ] as const;
 export type CounterKind = (typeof counterKinds)[number];
-export const counterLabels: Record<CounterKind, string> = {
-    members: "💚 ┃ Members",
-    humans: "👤 ┃ Humans",
-    bots: "🤖 ┃ Bots",
-    goal: "🚀 ┃ Goal",
-    supporters: "💝 ┃ Supporters",
-    boosts: "💎 ┃ Boosts",
-    staff_online: "🛠️ ┃ Staff Online",
+export const counterDetails: Record<
+    CounterKind,
+    { emoji: string; label: string }
+> = {
+    members: { emoji: "💚", label: "Members" },
+    humans: { emoji: "👤", label: "Humans" },
+    bots: { emoji: "🤖", label: "Bots" },
+    goal: { emoji: "🚀", label: "Goal" },
+    supporters: { emoji: "💝", label: "Supporters" },
+    boosts: { emoji: "💎", label: "Boosts" },
+    staff_online: { emoji: "🛠️", label: "Staff Online" },
 };
+export const defaultCounterSeparator = "┃";
+export const counterSeparatorSchema = z
+    .string()
+    .trim()
+    .min(1, "Enter a separator.")
+    .max(16, "Use a separator of up to 16 characters.")
+    .refine(
+        (value) => !/[\p{Cc}\p{Zl}\p{Zp}]/u.test(value),
+        "Use a separator on one line without control characters.",
+    );
 const roles = z.array(snowflake).max(25).default([]);
 export const serverStatsSchema = z
     .object({
@@ -42,11 +55,26 @@ export const serverStatsSchema = z
             .default(null),
         supporter_role_ids: roles,
         staff_role_ids: roles,
+        separators: z
+            .partialRecord(z.enum(counterKinds), counterSeparatorSchema)
+            .default({}),
     })
     .passthrough();
 export type ServerStatsSettings = z.infer<typeof serverStatsSchema>;
 export const statsUpdateMs = 10 * 60 * 1000;
 
-export function counterName(kind: CounterKind, value: number): string {
-    return `${counterLabels[kind]}: ${value}`;
+export function counterLabel(
+    kind: CounterKind,
+    separator = defaultCounterSeparator,
+): string {
+    const { emoji, label } = counterDetails[kind];
+    return `${emoji} ${separator} ${label}`;
+}
+
+export function counterName(
+    kind: CounterKind,
+    value: number,
+    separator = defaultCounterSeparator,
+): string {
+    return `${counterLabel(kind, separator)}: ${value}`;
 }

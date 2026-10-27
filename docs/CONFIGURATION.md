@@ -403,6 +403,12 @@ under **Member goal** and choose which roles count under **Supporter roles** and
 from supporter and staff totals. Staff online includes Online, Idle and Do Not
 Disturb; invisible users appear offline.
 
+Under **Separators**, choose an individual counter to change the text between its
+emoji and name. Each counter can use its own symbol or short string (up to 16
+characters), such as `|`, `・` or `┃`. Existing settings default to `┃`. The chosen
+separators appear in the editor and preview; channel renames follow the normal
+ten-minute interval. Changes are saved per server and need no database migration.
+
 **Preview** privately shows the proposed channel names without creating anything.
 **Enable stats** starts automatic generation. **Apply now** or `/stats refresh`
 creates missing counters immediately. Counts and channel names normally refresh
@@ -415,8 +421,10 @@ category, plus Connect and Send Messages to set the counter locks. It creates
 voice channels that inherit category visibility but deny joining and chatting to
 ordinary members. Discord administrators retain their normal permission bypass.
 The bot has its own View Channel, Connect and Manage Channels override so the
-counter locks do not block updates. Apply now repairs this override on counters
-created by older versions when the bot has permission to do so.
+counter locks do not block updates. If a counter from an older version locked the
+bot out, a server administrator must allow the bot these permissions on that
+counter before using Apply now again. Inaccessible counters are kept in the
+database and are not mistaken for deleted channels or duplicated.
 Changing category moves the generated channels. Deselecting counters removes
 only channels managed by this feature; selecting none removes all generated
 counters while enabled. **Pause stats** stops updates and keeps the channels.

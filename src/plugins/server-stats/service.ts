@@ -6,7 +6,6 @@ import {
     PermissionFlagsBits,
     PermissionsBitField,
     RESTJSONErrorCodes,
-    Routes,
     type VoiceChannel,
 } from "discord.js";
 import type { Context } from "../../core/plugin";
@@ -237,60 +236,12 @@ export class ServerStatsService {
                     }
                     const channel = await guild.channels
                         .fetch(row.channel_id, { force: true })
-                        .catch(async (error) => {
+                        .catch((error) => {
                             if (missingChannel(error)) return null;
                             if (accessError(error)) {
-                                const message = `I cannot access my generated stats channel <#${row.channel_id}>. Allow Caretaker View Channel, Connect and Manage Channels on that channel, plus Manage Roles for editing its permissions, then retry Apply now.`;
-                                const listed = (
-                                    await guild.channels.fetch()
-                                ).get(row.channel_id as string);
-                                const me =
-                                    guild.members.me ??
-                                    (await guild.members.fetchMe());
-                                if (
-                                    listed?.type !== ChannelType.GuildVoice ||
-                                    !me.permissions.has([
-                                        botCounterPermissions,
-                                        PermissionFlagsBits.ManageRoles,
-                                    ])
-                                )
-                                    throw new UserError(message);
-                                const own =
-                                    listed.permissionOverwrites.cache.get(
-                                        context.botId,
-                                    );
-                                await current();
-                                try {
-                                    await context.client.rest.put(
-                                        Routes.channelPermission(
-                                            listed.id,
-                                            context.botId,
-                                        ),
-                                        {
-                                            body: {
-                                                type: 1,
-                                                allow: (
-                                                    (own?.allow.bitfield ??
-                                                        0n) |
-                                                    botCounterPermissions
-                                                ).toString(),
-                                                deny: (
-                                                    (own?.deny.bitfield ?? 0n) &
-                                                    ~botCounterPermissions
-                                                ).toString(),
-                                            },
-                                            reason: "Restore bot access to its locked stats counter",
-                                        },
-                                    );
-                                    return await guild.channels.fetch(
-                                        listed.id,
-                                        { force: true },
-                                    );
-                                } catch (repairError) {
-                                    if (accessError(repairError))
-                                        throw new UserError(message);
-                                    throw repairError;
-                                }
+                                throw new UserError(
+                                    `I cannot access my generated stats channel <#${row.channel_id}>. A server admin must allow the bot View Channel, Connect and Manage Channels on that counter, then retry Apply now. Its channel record has been kept so no duplicate is created.`,
+                                );
                             }
                             throw error;
                         });
@@ -350,7 +301,11 @@ export class ServerStatsService {
                         throw new UserError(
                             `The ${kind} count is unavailable. Try again shortly.`,
                         );
-                    const name = counterName(kind, value);
+                    const name = counterName(
+                        kind,
+                        value,
+                        config.separators[kind],
+                    );
                     const renameDue =
                         !row.renamed_at ||
                         this.now() - new Date(row.renamed_at).getTime() >=
