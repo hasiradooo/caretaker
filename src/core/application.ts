@@ -7,6 +7,7 @@ import {
     Partials,
 } from "discord.js";
 import type { Environment } from "../config/environment";
+import { identifyBuild } from "../config/version";
 import { BotRepository } from "../database/bot-repository";
 import { connectDatabase } from "../database/connection";
 import { RuntimeLease } from "../database/lease";
@@ -18,6 +19,7 @@ import { createPlugins } from "../plugins";
 import { noMentions } from "../shared/discord";
 import { createLogger } from "../shared/logger";
 import type { Context } from "./plugin";
+import { syncRuntimeBio } from "./profile";
 import { PluginRuntime } from "./runtime";
 
 export async function startApplication(
@@ -30,6 +32,13 @@ export async function startApplication(
         env.MASTER_ENCRYPTION_KEY,
         env.API_SECRET_KEY ?? "",
     ]);
+    const identity = identifyBuild();
+    const startedAt = new Date();
+    log.info(`Starting ${env.BOT_NAME} ${identity.label}`, {
+        version: identity.version,
+        build: identity.build,
+        startedAt: startedAt.toISOString(),
+    });
     const db = connectDatabase(env);
     const client = new Client({
         intents: [
@@ -81,6 +90,7 @@ export async function startApplication(
     let cleanupTask: Promise<void> | undefined;
     let stopping = false;
     let readyTask: Promise<void> | undefined;
+    let profileTask: Promise<void> | undefined;
     const guildTasks = new Set<Promise<void>>();
     const syncGuild = (guild: import("discord.js").Guild) => {
         if (stopping) return;
@@ -110,6 +120,7 @@ export async function startApplication(
             await safely("HTTP", () => http?.stop(true));
             await safely("startup", () => readyTask);
             await safely("plugins", () => runtime.stop());
+            await safely("profile", () => profileTask);
             await cleanupTask;
             await leaseTask;
             await Promise.allSettled(guildTasks);
@@ -219,7 +230,22 @@ export async function startApplication(
             options.activatePlugins === false
                 ? `Startup check ready in ${client.guilds.cache.size} server(s); plugin actions disabled`
                 : `Ready in ${client.guilds.cache.size} server(s), ${plugins.length - 1} feature plugins loaded`,
+            { version: identity.version, build: identity.build },
         );
+        if (options.activatePlugins !== false)
+            profileTask = syncRuntimeBio(
+                client.rest,
+                env.DISCORD_CLIENT_ID,
+                identity,
+                startedAt,
+            )
+                .then(() => log.info(`Bio updated: ${identity.label}`))
+                .catch((error: unknown) =>
+                    log.warn(
+                        "Could not update the version in the bio; the running version is shown in the startup log",
+                        error,
+                    ),
+                );
         return { stop };
     } catch (error) {
         await stop();
