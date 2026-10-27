@@ -213,6 +213,12 @@ Open `/ticket settings` for one private Components V2 editor with these tabs:
 
 - **Channels**: choose the private-thread parent channel, support-panel destination, staff alerts
   and private transcripts. Each picker checks channel type and bot permissions.
+  Selections reload the channel, server roles and bot membership so recent permission
+  changes take effect immediately. If a channel cannot be saved, the picker stays
+  open and names the channel and missing permissions. Allow those permissions for
+  the bot in that channel (including category overrides), then select it again.
+  Support panels need View Channel and Send Messages; transcripts also need Attach
+  Files and must be hidden from @everyone.
 - **Staff roles**: add or remove selected roles without replacing the rest of the list.
   Staff choose **Join ticket** in the staff alert instead of being added automatically.
   Configure a staff alerts channel so staff without Manage Threads can join on demand.

@@ -24,6 +24,7 @@ import {
 import { type TicketSettings, ticketsSchema } from "./config";
 import { ticketPanel } from "./presentation";
 import {
+    refreshTicketChannel,
     ticketDestination,
     ticketParent,
     ticketStaffRole,
@@ -499,18 +500,29 @@ export class TicketSettingsEditor extends SettingsEditor<
             state.destination
         ) {
             const value = interaction.values[0] ?? "";
-            const channel =
-                state.destination === "parent_channel_id"
-                    ? await ticketParent(interaction.guild, value)
-                    : await ticketDestination(
-                          interaction.guild,
-                          value,
-                          state.destination === "transcript_channel_id",
-                      );
-            return {
-                patch: { [state.destination]: channel.id },
-                notice: `✓ ${destinations[state.destination]} saved.`,
-            };
+            if (!value) throw new UserError("Choose one channel.");
+            await this.assertCurrent(context, session);
+            try {
+                await refreshTicketChannel(interaction.guild, value);
+                const channel =
+                    state.destination === "parent_channel_id"
+                        ? await ticketParent(interaction.guild, value)
+                        : await ticketDestination(
+                              interaction.guild,
+                              value,
+                              state.destination === "transcript_channel_id",
+                          );
+                return {
+                    patch: { [state.destination]: channel.id },
+                    state: { view: "channels" },
+                    notice: `✓ ${destinations[state.destination]} saved: <#${channel.id}>.`,
+                };
+            } catch (error) {
+                if (!(error instanceof UserError)) throw error;
+                return {
+                    notice: `⚠️ ${destinations[state.destination]} was not saved. ${error.message}`,
+                };
+            }
         }
         if (
             interaction.isRoleSelectMenu() &&
