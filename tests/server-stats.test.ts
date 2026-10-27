@@ -13,7 +13,6 @@ import {
     type OverwriteData,
     PermissionFlagsBits,
     PermissionsBitField,
-    Routes,
 } from "discord.js";
 import type { Context } from "../src/core/plugin";
 import type { Database } from "../src/database/connection";
@@ -229,31 +228,12 @@ async function fixture(patch: Record<string, unknown> = {}, presence = false) {
         permissionOverwrites: { cache: new Collection<string, Overwrite>() },
     };
     channels.set(categoryId, category);
-    const put = mock(
-        async (
-            route: string,
-            options: { body: { type: number; allow: string; deny: string } },
-        ) => {
-            const match = /^\/channels\/(\d+)\/permissions\/(\d+)$/.exec(route);
-            if (!match || match[2] !== botId)
-                throw new Error("Unexpected permission target");
-            const channel = channels.get(match[1] ?? "") as Voice | undefined;
-            if (!channel) throw new Error("Unknown stats channel");
-            channel.permissionOverwrites.cache.set(botId, {
-                id: botId,
-                type: 1,
-                allow: new PermissionsBitField(BigInt(options.body.allow)),
-                deny: new PermissionsBitField(BigInt(options.body.deny)),
-            });
-        },
-    );
     const context = {
         botId,
         db,
         settings,
         state: new StateStore(db, botId),
         client: {
-            rest: { put },
             options: {
                 intents: new IntentsBitField([
                     GatewayIntentBits.GuildMembers,
@@ -357,7 +337,6 @@ async function fixture(patch: Record<string, unknown> = {}, presence = false) {
         channels,
         category,
         created,
-        put,
         makeVoice,
         roster,
         member,
@@ -381,14 +360,26 @@ test("stats defaults are disabled and only known, unique counters and positive g
         enabled: false,
         category_id: null,
         counters: ["members"],
+        separators: {},
     });
     for (const config of [
         { counters: ["members", "members"] },
         { counters: ["unknown"] },
         { member_goal: 0 },
         { member_goal: 1.5 },
+        { separators: { unknown: "|" } },
+        { separators: { members: " " } },
+        { separators: { members: "x".repeat(17) } },
+        { separators: { members: "|\n・" } },
+        { separators: { members: "|\u0000" } },
     ])
         expect(serverStatsSchema.safeParse(config).success).toBe(false);
+    expect(counterName("members", 12)).toBe("💚 ┃ Members: 12");
+    expect(
+        serverStatsSchema.parse({
+            separators: { members: " | ", boosts: "・" },
+        }).separators,
+    ).toEqual({ members: "|", boosts: "・" });
 });
 
 test("aggregate-only counters do not fetch the member roster", async () => {
@@ -609,7 +600,6 @@ test("inaccessible counters are not mistaken for deleted channels, while deleted
         if (channelId === id && inaccessible) throw { code: 50001 };
         return fetch(channelId, options);
     });
-    f.put.mockRejectedValueOnce({ code: 50001 });
     await expect(f.sync()).rejects.toThrow("generated stats channel");
     expect(f.created).toHaveLength(1);
     inaccessible = false;
@@ -622,7 +612,7 @@ test("inaccessible counters are not mistaken for deleted channels, while deleted
 });
 
 for (const savedId of [true, false]) {
-    test(`legacy locked counters regain bot access without creating a duplicate (${savedId ? "saved ID" : "pending creation"})`, async () => {
+    test(`legacy locked counters explain the required repair and reuse the channel after access is restored (${savedId ? "saved ID" : "pending creation"})`, async () => {
         const f = await fixture();
         expect(f.full.has(PermissionFlagsBits.Administrator)).toBe(false);
         const row = await f.repository.prepare(f.guildId, "members");
@@ -640,22 +630,22 @@ for (const savedId of [true, false]) {
         await expect(f.guild.channels.fetch(old.id)).rejects.toThrow(
             "Missing Access",
         );
-        await f.sync();
-        expect(f.put).toHaveBeenCalledWith(
-            Routes.channelPermission(old.id, botId),
-            {
-                body: {
-                    type: 1,
-                    allow: (
-                        PermissionFlagsBits.ViewChannel |
-                        PermissionFlagsBits.Connect |
-                        PermissionFlagsBits.ManageChannels
-                    ).toString(),
-                    deny: "0",
-                },
-                reason: "Restore bot access to its locked stats counter",
-            },
+        await expect(f.sync()).rejects.toThrow(
+            "A server admin must allow the bot",
         );
+        expect(f.created).toHaveLength(0);
+        // A server admin restores access to the existing counter.
+        old.permissionOverwrites.cache.set(botId, {
+            id: botId,
+            type: 1,
+            allow: new PermissionsBitField([
+                PermissionFlagsBits.ViewChannel,
+                PermissionFlagsBits.Connect,
+                PermissionFlagsBits.ManageChannels,
+            ]),
+            deny: new PermissionsBitField(),
+        });
+        await f.sync();
         expect(old.name).toBe(counterName("members", 12));
         expect(f.created).toHaveLength(0);
         expect(
@@ -667,7 +657,7 @@ for (const savedId of [true, false]) {
             old.id,
         );
         await f.sync();
-        expect(f.put).toHaveBeenCalledTimes(1);
+        expect(f.created).toHaveLength(0);
     });
 }
 
@@ -807,6 +797,95 @@ test("stats editor saves category/counters/roles/goal, previews privately and on
     await f.act("apply");
     expect(f.created).toHaveLength(3);
     expect((await f.config()).custom_note).toBe("Keep me");
+});
+
+test("counter separators save independently, preview privately and rename existing channels after the interval", async () => {
+    const f = await fixture({
+        counters: ["members", "goal", "boosts"],
+        member_goal: 1000,
+    });
+    await f.sync();
+    const ids = f.created.map((channel) => channel.id);
+    await f.open();
+    for (const [kind, separator, title] of [
+        ["members", "|", "Members separator"],
+        ["goal", "・", "Goal separator"],
+    ]) {
+        await f.act("separators");
+        const shown = await f.act(`separator-${kind}`);
+        const modal = wire(shown.showModal.mock.calls[0]?.[0]);
+        expect(modal.title).toBe(title);
+        expect(modal.components[0].component.value).toBe("┃");
+        await f.handle(
+            f.event(modal.custom_id, "modal", [], {
+                fields: { getTextInputValue: () => separator },
+            }),
+        );
+    }
+    // A new editor reads the stored values, including both separate edits.
+    await f.open();
+    expect((await f.config()).separators).toEqual({ members: "|", goal: "・" });
+    expect((await f.config()).custom_note).toBe("Keep me");
+    await f.act("separators");
+    const shown = await f.act("separator-members");
+    const modal = wire(shown.showModal.mock.calls[0]?.[0]);
+    expect(modal.components[0].component.value).toBe("|");
+    await f.act("home");
+    await f.act("preview");
+    expect(componentText(f.payload())).toContain("💚 | Members: 12");
+    expect(componentText(f.payload())).toContain("🚀 ・ Goal: 1000");
+    expect(componentText(f.payload())).toContain("💎 ┃ Boosts: 3");
+    expect(f.created.map((channel) => channel.name)).toEqual([
+        "💚 ┃ Members: 12",
+        "🚀 ┃ Goal: 1000",
+        "💎 ┃ Boosts: 3",
+    ]);
+    await f.act("home");
+    await f.act("apply");
+    expect(componentText(f.payload())).toContain("ten-minute update interval");
+    expect(f.created[0]?.name).toBe("💚 ┃ Members: 12");
+    f.advance(statsUpdateMs);
+    await f.freshService().sync(f.context, f.guild as unknown as Guild, true);
+    expect(f.created.map((channel) => channel.id)).toEqual(ids);
+    expect(f.created.map((channel) => channel.name)).toEqual([
+        "💚 | Members: 12",
+        "🚀 ・ Goal: 1000",
+        "💎 ┃ Boosts: 3",
+    ]);
+    const other = await fixture();
+    expect((await other.config()).separators).toEqual({});
+});
+
+test("separator edits reject invalid values and stale modals without overwriting saved choices", async () => {
+    const f = await fixture({ separators: { boosts: "・" } });
+    await f.open();
+    await f.act("separators");
+    let shown = await f.act("separator-members");
+    let modal = wire(shown.showModal.mock.calls[0]?.[0]);
+    await f.handle(
+        f.event(modal.custom_id, "modal", [], {
+            fields: { getTextInputValue: () => "a\nb" },
+        }),
+    );
+    expect(componentText(f.payload())).toContain("one line");
+    expect((await f.config()).separators).toEqual({ boosts: "・" });
+    await f.act("separators");
+    shown = await f.act("separator-members");
+    modal = wire(shown.showModal.mock.calls[0]?.[0]);
+    await f.settings.patch(f.guildId, "server_stats", serverStatsSchema, {
+        separators: { members: "•" },
+    });
+    await f.handle(
+        f.event(modal.custom_id, "modal", [], {
+            fields: { getTextInputValue: () => "|" },
+        }),
+    );
+    expect(componentText(f.payload())).toContain("Settings changed");
+    expect((await f.config()).separators).toEqual({
+        members: "•",
+        boosts: "・",
+    });
+    expect(f.created).toHaveLength(0);
 });
 
 test("stats controls reject unauthorized admins, another guild or bot, conflicts and expired sessions", async () => {

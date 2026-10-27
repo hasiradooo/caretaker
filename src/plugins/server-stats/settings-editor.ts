@@ -2,6 +2,7 @@ import {
     ButtonStyle,
     ChannelSelectMenuBuilder,
     ChannelType,
+    escapeMarkdown,
     type GuildMember,
     ModalBuilder,
     RoleSelectMenuBuilder,
@@ -20,9 +21,13 @@ import {
     SettingsEditor,
 } from "../../shared/settings-editor";
 import {
+    type CounterKind,
+    counterDetails,
     counterKinds,
-    counterLabels,
+    counterLabel,
     counterName,
+    counterSeparatorSchema,
+    defaultCounterSeparator,
     type ServerStatsSettings,
     serverStatsSchema,
 } from "./config";
@@ -38,11 +43,14 @@ interface State {
         | "home"
         | "category"
         | "counters"
+        | "separators"
         | "supporters"
         | "staff"
         | "goal-modal"
+        | "separator-modal"
         | "preview";
     preview?: string[];
+    counter?: CounterKind;
 }
 type Session = EditorSession<ServerStatsSettings, State>;
 const roleList = (ids: string[]) =>
@@ -97,12 +105,33 @@ export class ServerStatsSettingsEditor extends SettingsEditor<
                         .setMaxValues(counterKinds.length)
                         .addOptions(
                             counterKinds.map((kind) => ({
-                                label: counterLabels[kind],
+                                label: counterLabel(
+                                    kind,
+                                    config.separators[kind],
+                                ),
                                 value: kind,
                                 default: config.counters.includes(kind),
                             })),
                         ),
                 ),
+            );
+        } else if (state.view === "separators") {
+            sections.push(
+                "Choose a counter to edit the separator between its emoji and name. Each counter has its own separator, such as |, ・ or ┃.",
+                counterKinds
+                    .map((kind) =>
+                        escapeMarkdown(
+                            counterLabel(kind, config.separators[kind]),
+                        ),
+                    )
+                    .join("\n"),
+            );
+            const buttons = counterKinds.map((kind) =>
+                button(`separator-${kind}`, counterDetails[kind].label),
+            );
+            actions.push(
+                editorRow(...buttons.slice(0, 5)),
+                editorRow(...buttons.slice(5)),
             );
         } else if (state.view === "supporters" || state.view === "staff") {
             const roles =
@@ -128,12 +157,12 @@ export class ServerStatsSettingsEditor extends SettingsEditor<
             );
         } else if (state.view === "preview") {
             sections.push(
-                `### Channel preview\n${state.preview?.join("\n") ?? "No counters selected."}`,
+                `### Channel preview\n${state.preview?.map((name) => escapeMarkdown(name)).join("\n") ?? "No counters selected."}`,
                 "Private preview only. No channels were created or changed.",
             );
         } else {
             sections.push(
-                `### Displayed counters\n${config.counters.map((kind) => counterLabels[kind]).join("\n") || "None"}`,
+                `### Displayed counters\n${config.counters.map((kind) => escapeMarkdown(counterLabel(kind, config.separators[kind]))).join("\n") || "None"}`,
                 `**Member goal:** ${config.member_goal ?? "Not set"}\n**Supporter roles:** ${roleList(config.supporter_role_ids)}\n**Staff roles:** ${roleList(config.staff_role_ids)}`,
                 "Enable to generate locked voice channels in your category. Counts update about every ten minutes. Apply now creates missing channels and applies changes; existing names respect the same update interval. Pausing keeps channels in place.",
             );
@@ -146,6 +175,7 @@ export class ServerStatsSettingsEditor extends SettingsEditor<
                     button("goal", "Member goal"),
                 ),
                 editorRow(
+                    button("separators", "Separators"),
                     button("preview", "Preview"),
                     button(
                         "apply",
@@ -174,6 +204,28 @@ export class ServerStatsSettingsEditor extends SettingsEditor<
     }
 
     protected form(session: Session, action: string) {
+        if (session.state.view === "separators") {
+            const counter = counterKinds.find(
+                (kind) => action === `separator-${kind}`,
+            );
+            if (counter)
+                return {
+                    state: { view: "separator-modal" as const, counter },
+                    modal: new ModalBuilder()
+                        .setTitle(`${counterDetails[counter].label} separator`)
+                        .addLabelComponents(
+                            editorInput(
+                                "Separator",
+                                "separator",
+                                session.config.separators[counter] ??
+                                    defaultCounterSeparator,
+                                16,
+                                false,
+                                "Use a symbol or short text, such as | or ・. Use ┃ for the default.",
+                            ),
+                        ),
+                };
+        }
         if (action !== "goal" || session.state.view !== "home")
             return undefined;
         return {
@@ -248,6 +300,19 @@ export class ServerStatsSettingsEditor extends SettingsEditor<
         if (
             interaction.isModalSubmit() &&
             action === "submit" &&
+            state.view === "separator-modal" &&
+            state.counter
+        )
+            return saved({
+                separators: {
+                    [state.counter]: counterSeparatorSchema.parse(
+                        interaction.fields.getTextInputValue("separator"),
+                    ),
+                },
+            });
+        if (
+            interaction.isModalSubmit() &&
+            action === "submit" &&
             state.view === "goal-modal"
         )
             return saved({
@@ -264,6 +329,7 @@ export class ServerStatsSettingsEditor extends SettingsEditor<
                     "home",
                     "category",
                     "counters",
+                    "separators",
                     "supporters",
                     "staff",
                 ].includes(action)
@@ -299,7 +365,11 @@ export class ServerStatsSettingsEditor extends SettingsEditor<
                         state: {
                             view: "preview",
                             preview: config.counters.map((kind) =>
-                                counterName(kind, counts[kind] ?? 0),
+                                counterName(
+                                    kind,
+                                    counts[kind] ?? 0,
+                                    config.separators[kind],
+                                ),
                             ),
                         },
                     };
