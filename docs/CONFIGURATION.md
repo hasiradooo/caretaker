@@ -414,6 +414,9 @@ The bot needs View Channel, Manage Channels and Manage Roles in the selected
 category, plus Connect and Send Messages to set the counter locks. It creates
 voice channels that inherit category visibility but deny joining and chatting to
 ordinary members. Discord administrators retain their normal permission bypass.
+The bot has its own View Channel, Connect and Manage Channels override so the
+counter locks do not block updates. Apply now repairs this override on counters
+created by older versions when the bot has permission to do so.
 Changing category moves the generated channels. Deselecting counters removes
 only channels managed by this feature; selecting none removes all generated
 counters while enabled. **Pause stats** stops updates and keeps the channels.

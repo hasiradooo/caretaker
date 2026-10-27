@@ -77,7 +77,7 @@ export async function statsCategory(guild: Guild, id: string | null) {
         ])
     )
         throw new UserError(
-            "I need View Channel, Manage Channels and Manage Roles in that category, plus Connect and Send Messages to create locked counters.",
+            "My server role needs View Channel, Manage Channels, Manage Roles, Connect and Send Messages. View Channel, Manage Channels and Manage Roles must also be allowed in the stats category.",
         );
     return category;
 }

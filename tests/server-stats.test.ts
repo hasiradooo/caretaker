@@ -13,6 +13,7 @@ import {
     type OverwriteData,
     PermissionFlagsBits,
     PermissionsBitField,
+    Routes,
 } from "discord.js";
 import type { Context } from "../src/core/plugin";
 import type { Database } from "../src/database/connection";
@@ -105,6 +106,20 @@ async function fixture(patch: Record<string, unknown> = {}, presence = false) {
     const channels = new Collection<string, unknown>();
     const roster = new Collection<string, GuildMember>();
     const created: Voice[] = [];
+    const accessible = (voice: Voice): boolean => {
+        const everyone = voice.permissionOverwrites.cache.get(guildId);
+        const own = voice.permissionOverwrites.cache.get(botId);
+        const bits =
+            (((full.bitfield & ~(everyone?.deny.bitfield ?? 0n)) |
+                (everyone?.allow.bitfield ?? 0n)) &
+                ~(own?.deny.bitfield ?? 0n)) |
+            (own?.allow.bitfield ?? 0n);
+        return new PermissionsBitField(bits).has([
+            PermissionFlagsBits.ViewChannel,
+            PermissionFlagsBits.Connect,
+            PermissionFlagsBits.ManageChannels,
+        ]);
+    };
     const overwrites = (items: OverwriteData[]) =>
         new Collection<string, Overwrite>(
             items.map((item) => {
@@ -132,6 +147,10 @@ async function fixture(patch: Record<string, unknown> = {}, presence = false) {
             parentId: parent,
             permissionOverwrites: { cache: overwrites(permissions) },
             setName: mock(async (name) => {
+                if (!accessible(voice))
+                    throw Object.assign(new Error("Missing Access"), {
+                        code: 50001,
+                    });
                 voice.name = name;
             }),
             edit: mock(async (options) => {
@@ -170,9 +189,21 @@ async function fixture(patch: Record<string, unknown> = {}, presence = false) {
             ),
         },
         channels: {
-            fetch: mock(async (id?: string, _options?: { force?: boolean }) =>
-                id ? (channels.get(id) ?? null) : new Collection(channels),
-            ),
+            fetch: mock(async (id?: string, _options?: { force?: boolean }) => {
+                if (!id) return new Collection(channels);
+                const channel = channels.get(id);
+                if (
+                    channel &&
+                    typeof channel === "object" &&
+                    "type" in channel &&
+                    channel.type === ChannelType.GuildVoice &&
+                    !accessible(channel as Voice)
+                )
+                    throw Object.assign(new Error("Missing Access"), {
+                        code: 50001,
+                    });
+                return channel ?? null;
+            }),
             create: mock(
                 async (options: {
                     name: string;
@@ -198,12 +229,31 @@ async function fixture(patch: Record<string, unknown> = {}, presence = false) {
         permissionOverwrites: { cache: new Collection<string, Overwrite>() },
     };
     channels.set(categoryId, category);
+    const put = mock(
+        async (
+            route: string,
+            options: { body: { type: number; allow: string; deny: string } },
+        ) => {
+            const match = /^\/channels\/(\d+)\/permissions\/(\d+)$/.exec(route);
+            if (!match || match[2] !== botId)
+                throw new Error("Unexpected permission target");
+            const channel = channels.get(match[1] ?? "") as Voice | undefined;
+            if (!channel) throw new Error("Unknown stats channel");
+            channel.permissionOverwrites.cache.set(botId, {
+                id: botId,
+                type: 1,
+                allow: new PermissionsBitField(BigInt(options.body.allow)),
+                deny: new PermissionsBitField(BigInt(options.body.deny)),
+            });
+        },
+    );
     const context = {
         botId,
         db,
         settings,
         state: new StateStore(db, botId),
         client: {
+            rest: { put },
             options: {
                 intents: new IntentsBitField([
                     GatewayIntentBits.GuildMembers,
@@ -307,6 +357,7 @@ async function fixture(patch: Record<string, unknown> = {}, presence = false) {
         channels,
         category,
         created,
+        put,
         makeVoice,
         roster,
         member,
@@ -461,6 +512,20 @@ test("generated voice counters preserve private visibility and cannot inherit jo
                 .get(staffId)
                 ?.allow.has(PermissionFlagsBits.Connect),
         ).toBe(false);
+        expect(
+            channel.permissionOverwrites.cache
+                .get(botId)
+                ?.allow.has([
+                    PermissionFlagsBits.ViewChannel,
+                    PermissionFlagsBits.Connect,
+                    PermissionFlagsBits.ManageChannels,
+                ]),
+        ).toBe(true);
+        expect(
+            channel.permissionOverwrites.cache
+                .get(botId)
+                ?.allow.has(PermissionFlagsBits.Administrator, false),
+        ).toBe(false);
     }
     expect(unrelated.delete).not.toHaveBeenCalled();
 });
@@ -544,7 +609,8 @@ test("inaccessible counters are not mistaken for deleted channels, while deleted
         if (channelId === id && inaccessible) throw { code: 50001 };
         return fetch(channelId, options);
     });
-    await expect(f.sync()).rejects.toEqual({ code: 50001 });
+    f.put.mockRejectedValueOnce({ code: 50001 });
+    await expect(f.sync()).rejects.toThrow("generated stats channel");
     expect(f.created).toHaveLength(1);
     inaccessible = false;
     f.channels.delete(id);
@@ -554,6 +620,56 @@ test("inaccessible counters are not mistaken for deleted channels, while deleted
         f.created[1]?.id ?? "",
     );
 });
+
+for (const savedId of [true, false]) {
+    test(`legacy locked counters regain bot access without creating a duplicate (${savedId ? "saved ID" : "pending creation"})`, async () => {
+        const f = await fixture();
+        expect(f.full.has(PermissionFlagsBits.Administrator)).toBe(false);
+        const row = await f.repository.prepare(f.guildId, "members");
+        const old = f.makeVoice(`stats-${row.creation_token}`, categoryId, [
+            {
+                id: f.guildId,
+                type: 0,
+                allow: 0n,
+                deny:
+                    PermissionFlagsBits.Connect |
+                    PermissionFlagsBits.SendMessages,
+            },
+        ]);
+        if (savedId) await f.repository.attach(f.guildId, "members", old.id);
+        await expect(f.guild.channels.fetch(old.id)).rejects.toThrow(
+            "Missing Access",
+        );
+        await f.sync();
+        expect(f.put).toHaveBeenCalledWith(
+            Routes.channelPermission(old.id, botId),
+            {
+                body: {
+                    type: 1,
+                    allow: (
+                        PermissionFlagsBits.ViewChannel |
+                        PermissionFlagsBits.Connect |
+                        PermissionFlagsBits.ManageChannels
+                    ).toString(),
+                    deny: "0",
+                },
+                reason: "Restore bot access to its locked stats counter",
+            },
+        );
+        expect(old.name).toBe(counterName("members", 12));
+        expect(f.created).toHaveLength(0);
+        expect(
+            old.permissionOverwrites.cache
+                .get(f.guildId)
+                ?.deny.has(PermissionFlagsBits.Connect),
+        ).toBe(true);
+        expect((await f.repository.list(f.guildId))[0]?.channel_id).toBe(
+            old.id,
+        );
+        await f.sync();
+        expect(f.put).toHaveBeenCalledTimes(1);
+    });
+}
 
 test("creation interrupted before saving the channel ID is recovered by its unique token", async () => {
     const f = await fixture();
