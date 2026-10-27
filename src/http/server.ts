@@ -1,5 +1,6 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { ZodError } from "zod";
+import { packageVersion } from "../config/version";
 import type { Context, Plugin } from "../core/plugin";
 import { BirthdayRepository } from "../plugins/birthday/repository";
 import { LevelsRepository } from "../plugins/levels/repository";
@@ -108,7 +109,7 @@ export function createHttpHandler(
             if (path === "/discord/v1/status" && request.method === "GET")
                 return json({
                     name: context.env.BOT_NAME,
-                    version: "2.0.0",
+                    version: packageVersion,
                     ready: context.client.isReady(),
                 });
             if (path === "/discord/v1/ping" && request.method === "GET")

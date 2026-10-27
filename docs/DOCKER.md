@@ -46,7 +46,7 @@ commands automatically.
 docker compose up -d --build    # Build changed code and start/recreate the bot
 docker compose ps              # Show container status
 docker compose logs --tail=100 bot
-docker compose restart bot     # Restart after replacing a certificate
+docker compose restart bot     # Restart the current image
 docker compose down            # Stop and remove the container; Aiven data stays
 ```
 
@@ -54,6 +54,23 @@ After changing `.env`, run `docker compose up -d --force-recreate` so the
 container receives the new values. Restart alone does not reload its environment.
 The restart policy brings the bot back after a crash or Docker restart, unless
 you stopped it. Docker itself must be running.
+
+After pulling updated code, rebuild and recreate the bot:
+
+```sh
+git pull
+docker compose up -d --build bot
+docker compose logs --follow --tail=100 bot
+```
+
+Look for `Starting Caretaker v2.0.0+...` and the subsequent `Ready` message.
+The build identifier changes when the running bundle or its dependencies change;
+an ordinary restart keeps that identifier and gets a new startup time. The bot's
+About Me shows the same **Caretaker build** and **Last start** (UTC). This works
+without Git in the image and needs no new environment variables.
+
+The checked-in GitHub Actions workflow runs checks; it does not deploy or restart
+this container. Automatic deployment must be configured in your hosting service.
 
 ## Upgrade an existing database
 
