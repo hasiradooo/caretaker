@@ -66,8 +66,11 @@ export class StarboardSettingsEditor extends SettingsEditor<
                 emoji: config.emoji,
                 count: config.threshold,
                 createdAt: Date.now(),
-                text: "A message your community enjoyed. Highlights show the original message, attached photos, its author, and a link back to the conversation.",
-                images: [member.displayAvatarURL({ size: 1024 })],
+                text: "A message your community enjoyed, with four sample photos. The last photo is a spoiler. ||Example spoiler text.||",
+                images: Array.from({ length: 4 }, (_, index) => ({
+                    url: member.displayAvatarURL({ size: 1024 }),
+                    spoiler: index === 3,
+                })),
                 preview: true,
             });
             return {

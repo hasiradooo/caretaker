@@ -25,6 +25,7 @@ try {
         rest,
         env.DISCORD_CLIENT_ID,
         env.COMMAND_GUILD_ID,
+        env.DISCORD_PRESENCES_ENABLED,
     );
     const route = env.COMMAND_GUILD_ID
         ? Routes.applicationGuildCommands(

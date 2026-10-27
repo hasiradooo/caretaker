@@ -1,5 +1,5 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from "discord.js";
-import { card, clipText } from "../../shared/messages";
+import { type CardImage, card, clipText } from "../../shared/messages";
 import type { StarboardSettings } from "./config";
 
 export function watchedChannels(config: StarboardSettings): string {
@@ -23,10 +23,15 @@ export function starboardCard(input: {
     emoji: string;
     createdAt: number;
     text: string;
-    images?: string[];
+    images?: CardImage[];
     url?: string;
     preview?: boolean;
 }) {
+    // Cutting off a closing || can turn hidden text into a visible excerpt.
+    const text =
+        input.text.length > 3200 && input.text.includes("||")
+            ? "*This long message contains spoilers. View the original to read it.*"
+            : input.text;
     return card({
         title: "Community highlight",
         icon: "⭐",
@@ -34,7 +39,7 @@ export function starboardCard(input: {
         body: `<@${input.authorId}> · ${input.channelId ? `<#${input.channelId}>` : "An eligible channel"}\n${input.emoji} **${input.count}** · <t:${Math.floor(input.createdAt / 1000)}:f>`,
         sections: [
             clipText(
-                input.text ||
+                text ||
                     (input.images?.length
                         ? "*Photo attachments*"
                         : "*Attachment or embed — open the original message below.*"),

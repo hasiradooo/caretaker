@@ -18,6 +18,9 @@ test("portable initialization creates the complete schema and refuses to replace
         );
         expect(tables.map((row) => row.tablename)).toContain("linked_accounts");
         expect(tables.map((row) => row.tablename)).toContain("runtime_leases");
+        expect(tables.map((row) => row.tablename)).toContain(
+            "server_stat_channels",
+        );
         await db.query(
             "insert into discord.user_levels(bot_id,guild_id,user_id,xp) values ('bot','guild','user',123)",
         );

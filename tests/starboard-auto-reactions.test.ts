@@ -454,7 +454,7 @@ test("removing the bot's starter refreshes Discord's cached count", async () => 
     expect(f.target.send).not.toHaveBeenCalled();
 });
 
-test("photo attachments preview as a gallery on new and updated highlights without revealing spoilers", async () => {
+test("photo galleries preserve spoiler flags on new and updated highlights", async () => {
     const f = await fixture();
     f.message.content = "";
     const attachments = [
@@ -484,14 +484,35 @@ test("photo attachments preview as a gallery on new and updated highlights witho
     ).toEqual([
         "https://cdn.discordapp.com/attachments/example/one.png",
         "https://cdn.discordapp.com/attachments/example/two.JPG",
+        "https://cdn.discordapp.com/attachments/example/SPOILER_hidden.png",
     ]);
+    expect(gallery(posted)?.items[0].spoiler).not.toBe(true);
+    expect(gallery(posted)?.items[2].spoiler).toBe(true);
     expect(componentText(posted)).toContain("Photo attachments");
     f.message.attachments.delete("one.png");
     await f.add(f.makeReaction(3, false));
     const updated = f.target.messages.edit.mock.calls[0]?.[1];
-    expect(gallery(updated)?.items).toHaveLength(1);
+    expect(gallery(updated)?.items).toHaveLength(2);
     expect(gallery(updated)?.items[0].media.url).toBe(
         "https://cdn.discordapp.com/attachments/example/two.JPG",
     );
     expect(f.target.send).toHaveBeenCalledTimes(1);
+    expect(gallery(updated)?.items[1].spoiler).toBe(true);
+});
+
+test("starboard preserves spoiler text and avoids exposing it when a long message needs truncation", async () => {
+    const short = await fixture();
+    short.message.content = "Before ||a hidden answer|| after";
+    await short.add(short.makeReaction(2, false));
+    expect(componentText(short.target.send.mock.calls[0]?.[0])).toContain(
+        "Before ||a hidden answer|| after",
+    );
+
+    const long = await fixture();
+    long.message.content = `Before ||${"secret answer ".repeat(300)}|| after`;
+    await long.add(long.makeReaction(2, false));
+    const posted = long.target.send.mock.calls[0]?.[0];
+    expect(componentText(posted)).not.toContain("secret answer");
+    expect(componentText(posted)).toContain("View the original to read it");
+    expect(JSON.stringify(posted)).toContain(long.message.url);
 });

@@ -48,6 +48,9 @@ export async function startApplication(
             GatewayIntentBits.GuildMessageReactions,
             GatewayIntentBits.GuildVoiceStates,
             GatewayIntentBits.MessageContent,
+            ...(env.DISCORD_PRESENCES_ENABLED
+                ? [GatewayIntentBits.GuildPresences]
+                : []),
         ],
         partials: [
             Partials.Message,
