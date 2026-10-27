@@ -96,7 +96,13 @@ bun run profile:update --apply # Save the bio to Discord and verify it
 The updater uses `DISCORD_TOKEN` and checks that it belongs to `DISCORD_CLIENT_ID`.
 It changes only the application's description (the global bot bio), shared across
 servers. It does not change names, avatars, or server-specific profile overrides.
-No restart is needed, and ordinary bot startups do not overwrite the bio.
+The update command preserves the running version footer. Every normal startup
+updates **Caretaker build** and **Last start** in the bio while retaining its
+existing text. The build combines the package version with a fingerprint of the
+running bundle and dependencies, such as `v2.0.0+0123456789ab`; development source
+runs show `v2.0.0+dev`. The same version and startup time appear in console logs.
+Long bio text is shortened to leave room within Discord's 400-character limit.
+Bio update failures are logged and do not stop the bot. Smoke tests skip bio updates.
 Discord's [application description guide](https://github.com/discord/discord-api-docs/blob/main/developers/discovery/best-practices.mdx)
 documents the 400-character profile description limit.
 

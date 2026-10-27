@@ -1,11 +1,12 @@
 import { REST, Routes } from "discord.js";
 import { z } from "zod";
 import { botProfile } from "../src/config/profile";
+import { preserveRuntimeBio } from "../src/core/profile";
 import { createLogger } from "../src/shared/logger";
 import { snowflake } from "../src/shared/validation";
 
-// This is an operator command, not a startup hook: normal restarts never replace
-// profile edits made in Discord. It needs no database connection or gateway login.
+// This operator command edits bio text while preserving the running version footer.
+// It needs no database connection or gateway login.
 const apply = process.argv.includes("--apply");
 const log = createLogger("profile", "info", [process.env.DISCORD_TOKEN ?? ""]);
 try {
@@ -20,6 +21,9 @@ try {
     const bio = result.data;
     console.log(
         `Proposed About Me (${bio.length}/400 characters):\n\n${bio}\n`,
+    );
+    console.log(
+        "The running version and last startup time are preserved on apply.",
     );
     if (!apply) {
         // A preview works offline and never even reads credentials.
@@ -42,13 +46,14 @@ try {
         // A copied .env must never update a different bot by accident.
         if (current.id !== appId.data)
             throw new Error("DISCORD_CLIENT_ID does not match this bot token.");
-        if (current.description === bio) {
+        const description = preserveRuntimeBio(bio, current.description);
+        if (current.description === description) {
             log.info(`${current.name}: About Me is already up to date.`);
         } else {
             // Only description is sent. Naming, images and app settings are separate.
-            await rest.patch(route, { body: { description: bio } });
+            await rest.patch(route, { body: { description } });
             const saved = schema.parse(await rest.get(route));
-            if (saved.id !== current.id || saved.description !== bio)
+            if (saved.id !== current.id || saved.description !== description)
                 throw new Error(
                     "Discord did not return the expected saved bio. Check its profile before retrying.",
                 );
