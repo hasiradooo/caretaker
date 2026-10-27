@@ -346,7 +346,8 @@ Open `/starboard settings` for a private Components V2 editor (Manage Server
 required). Use **Channel**, **Reaction threshold**, **Emoji**, **Watched channels**,
 the self-star toggle, **Enable/Disable auto-reactions**, **Preview**, and
 **Enable/Pause starboard**. The preview uses
-the real highlight layout with sample text and never posts or notifies anyone.
+the real highlight layout with sample text and a photo (using your profile image)
+and never posts or notifies anyone.
 Channel and rule edits save without automatically enabling the feature.
 
 Shortcuts: `/starboard status`, `/starboard channel channel:#highlights`,
@@ -355,18 +356,21 @@ and `/starboard disable`. All replies are private and require Manage Server.
 Paste one Unicode emoji or a custom emoji from this server (or its ID). Custom
 emoji are matched by ID, so renaming them does not break starboard.
 
-Watched channels support **All public channels**, **Watch none**, and adding or
+Watched channels support **All accessible channels**, **Watch none**, and adding or
 removing selected channels. Add up to 25 at a time, up to 100 total; removal is
 paged so longer existing lists remain editable. Selected text/announcement
 channels include their public threads; selecting a forum/media channel watches
-its public posts. Private channels and private threads remain excluded. The
-destination cannot watch itself. Clearing the destination also pauses starboard.
+its public posts. Public and private channels are eligible when the bot has View
+Channel and Read Message History. This applies to both selected channels and
+**All accessible channels**. Highlights from private channels are copied to the
+configured starboard destination. Private threads remain excluded. The destination
+cannot watch itself. Clearing the destination also pauses starboard.
 
 **Auto-reactions** (`auto_react`, default false) add the configured emoji to new
 member messages in watched channels, including public threads and new forum/media
 posts. Starboard must also be enabled and have a destination. The bot needs View
 Channel, Read Message History and Add Reactions in the watched channels. Bot,
-webhook and system messages are skipped, as are private/unwatched channels,
+webhook and system messages are skipped, as are inaccessible/unwatched channels,
 archived/locked threads and adult sources with a non-adult destination. Existing
 messages are not scanned. Disabling the option leaves existing reactions intact.
 The bot's own reaction never contributes to the threshold or displayed highlight
@@ -374,13 +378,17 @@ count, even after disabling auto-reactions or restarting the bot.
 
 Set `channel_id`, `threshold` (default 15), `emoji` (default ⭐),
 `allow_self_star` (default false) and `watch_channels` (`null` means all eligible
-channels, `[]` means none). Private messages/channels and private threads are
+channels the bot can read, `[]` means none). Direct messages and private threads are
 excluded. Adult-channel content is not copied into a non-adult destination.
 Highlights update as reactions change. Removing all stars or deleting a source
 removes its highlight. Already recorded highlights stay in their original
 destination after you change the setting; new highlights use the new channel.
 Rule changes apply to subsequent reactions; they do not scan historical messages
 or immediately recount all existing highlights. Pausing keeps saved highlights.
+Highlights display up to ten attached photos in a gallery, including posts with
+no text. Photos without a content type are recognized by their filename. Spoiler
+attachments and non-image files are not shown in the gallery. Subsequent reaction
+updates refresh the gallery on the existing highlight.
 
 ## Temporary voice — `tempvc`
 

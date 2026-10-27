@@ -697,6 +697,17 @@ test("starboard editor validates destinations, previews privately and preserves 
     await f.act("preview");
     expect(componentText(f.payload())).toContain("Community highlight");
     expect(componentText(f.payload())).toContain("Private preview");
+    expect(
+        wire(f.payload()).components.find(
+            (item: { type: number }) =>
+                item.type === ComponentType.MediaGallery,
+        )?.items,
+    ).toEqual([
+        {
+            media: { url: f.member.displayAvatarURL() },
+            description: "Shared image",
+        },
+    ]);
     expect(f.send).not.toHaveBeenCalled();
     expect(await f.raw()).toEqual(before);
     await f.act("home");
@@ -755,13 +766,13 @@ test("starboard inputs reject invalid rules, allow cancellation, and cannot over
     expect((await f.starboard()).custom_note).toBe("Keep me");
 });
 
-test("watched channels support all, none, add/remove, and reject private or inaccessible sources", async () => {
+test("watched channels support all, none, add/remove, and reject inaccessible sources", async () => {
     const f = await fixture("starboard");
     await f.settings.patch(guildId, "starboard", starboardSchema, {
         channel_id: channelId,
     });
     await f.act("refresh");
-    for (const invalid of [privateId, deniedId, categoryId, channelId]) {
+    for (const invalid of [deniedId, categoryId, channelId]) {
         await f.act("watch");
         await f.act("add-channels", "channel", [invalid]);
         expect((await f.starboard()).watch_channels).toBeNull();
@@ -786,6 +797,21 @@ test("watched channels support all, none, add/remove, and reject private or inac
     await f.act("all");
     expect((await f.starboard()).watch_channels).toBeNull();
     expect((await f.starboard()).enabled).toBe(false);
+});
+
+test("private channels the bot can read can be selected and enabled for starboard", async () => {
+    const f = await fixture("starboard");
+    await f.settings.patch(guildId, "starboard", starboardSchema, {
+        channel_id: channelId,
+    });
+    await f.act("refresh");
+    await f.act("watch");
+    await f.act("add-channels", "channel", [privateId]);
+    expect((await f.starboard()).watch_channels).toEqual([privateId]);
+    await f.act("home");
+    await f.act("toggle");
+    expect((await f.starboard()).enabled).toBe(true);
+    expect(f.send).not.toHaveBeenCalled();
 });
 
 test("100 watched channels remain editable through paging without dropping unselected entries", async () => {

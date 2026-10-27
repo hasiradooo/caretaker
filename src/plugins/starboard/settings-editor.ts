@@ -66,7 +66,8 @@ export class StarboardSettingsEditor extends SettingsEditor<
                 emoji: config.emoji,
                 count: config.threshold,
                 createdAt: Date.now(),
-                text: "A message your community enjoyed. Highlights show the original message, its author, and a link back to the conversation.",
+                text: "A message your community enjoyed. Highlights show the original message, attached photos, its author, and a link back to the conversation.",
+                images: [member.displayAvatarURL({ size: 1024 })],
                 preview: true,
             });
             return {
@@ -111,14 +112,14 @@ export class StarboardSettingsEditor extends SettingsEditor<
             const slice = selected.slice(page * 25, (page + 1) * 25);
             sections.push(
                 config.watch_channels === null
-                    ? "All eligible public channels are watched. Adding a selection switches to watching only those channels."
+                    ? "All eligible public and private channels the bot can read are watched. Adding a selection switches to watching only those channels."
                     : `**Selected channels**\n${clipText(selected.map((channel) => `<#${channel}>`).join(", ") || "None", 1800)}`,
-                "Public threads in selected channels are included. Private channels/threads and the starboard destination are always excluded.",
+                "Public threads in selected channels are included. Private threads and the starboard destination are excluded. Highlights from private channels appear in the starboard destination too.",
             );
             actions.push(
                 editorRow(
                     button("home", "Back"),
-                    button("all", "All public channels"),
+                    button("all", "All accessible channels"),
                     button("none", "Watch none"),
                     button("add", "Add channels").setDisabled(
                         state.mode !== "remove",
@@ -165,7 +166,7 @@ export class StarboardSettingsEditor extends SettingsEditor<
                     editorRow(
                         new ChannelSelectMenuBuilder()
                             .setCustomId(id("add-channels"))
-                            .setPlaceholder("Add up to 25 public channels")
+                            .setPlaceholder("Add up to 25 channels")
                             .setChannelTypes(...sourceChannelTypes)
                             .setMinValues(1)
                             .setMaxValues(25),
@@ -178,7 +179,7 @@ export class StarboardSettingsEditor extends SettingsEditor<
                     "Choose a destination channel first. Highlights cannot be posted until one is selected.",
                 );
             sections.push(
-                "Messages appear when they reach the reaction threshold. Editing settings does not scan old messages or move existing highlights; eligible reactions apply the current rules.",
+                "Messages from watched public and private channels the bot can read appear in the destination when they reach the reaction threshold. Editing settings does not scan old messages or move existing highlights; eligible reactions apply the current rules.",
                 "Auto-reactions add the selected emoji to new member posts in watched channels while starboard is enabled. The bot's reaction never counts toward the threshold. Requires Add Reactions and Read Message History in those channels.",
             );
             actions.push(
@@ -325,7 +326,7 @@ export class StarboardSettingsEditor extends SettingsEditor<
                 ];
                 if (channels.length > 100)
                     throw new UserError(
-                        "You can watch up to 100 selected channels. Remove some first or choose All public channels.",
+                        "You can watch up to 100 selected channels. Remove some first or choose All accessible channels.",
                     );
                 for (const channel of selected)
                     await starboardSource(
@@ -413,7 +414,7 @@ export class StarboardSettingsEditor extends SettingsEditor<
                         state: { view: "watch" },
                         notice:
                             action === "all"
-                                ? "✓ Watching all eligible public channels."
+                                ? "✓ Watching all accessible public and private channels."
                                 : "✓ Watching no channels. Existing highlights are kept.",
                     };
                 if (action === "add" || action === "remove")

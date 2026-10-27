@@ -4,6 +4,7 @@ import {
     ChannelType,
     type ClientEvents,
     Collection,
+    ComponentType,
     Events,
     type Message,
     type MessageReaction,
@@ -65,7 +66,10 @@ async function fixture(config: Partial<StarboardSettings> = {}) {
         isThread: () => false,
         permissionsFor: () => full,
         send,
-        messages: { edit: mock(async () => {}), delete: mock(async () => {}) },
+        messages: {
+            edit: mock(async (_id: string, _payload: unknown) => {}),
+            delete: mock(async () => {}),
+        },
     };
     const guild = {
         id: guildId,
@@ -105,7 +109,15 @@ async function fixture(config: Partial<StarboardSettings> = {}) {
         },
         content: "A community post",
         createdTimestamp: Date.now(),
-        attachments: new Collection(),
+        attachments: new Collection<
+            string,
+            {
+                url: string;
+                contentType: string | null;
+                name: string;
+                spoiler: boolean;
+            }
+        >(),
         url: `https://discord.com/channels/${guildId}/${channelId}/${id}`,
         reactions: { cache },
         react: mock(async (emoji: string) => {
@@ -227,7 +239,7 @@ for (const scenario of [
     "system",
     "webhook",
     "dm",
-    "private",
+    "inaccessible",
     "private-thread",
     "destination",
     "destination-thread",
@@ -241,7 +253,7 @@ for (const scenario of [
         if (scenario === "system") f.message.system = true;
         if (scenario === "webhook") f.message.webhookId = "600000000000000001";
         if (scenario === "dm") f.message.inGuild = () => false;
-        if (scenario === "private")
+        if (scenario === "inaccessible")
             f.source.permissionsFor.mockImplementation(
                 () => new PermissionsBitField(),
             );
@@ -267,7 +279,7 @@ for (const scenario of [
     });
 }
 
-test("all public channels, public threads and new forum/media posts receive starter reactions", async () => {
+test("all accessible channels, public threads and new forum/media posts receive starter reactions", async () => {
     const all = await fixture({ watch_channels: null });
     await all.create();
     expect(all.message.react).toHaveBeenCalledTimes(1);
@@ -286,6 +298,66 @@ test("all public channels, public threads and new forum/media posts receive star
         expect(f.message.react).toHaveBeenCalledTimes(1);
     }
 });
+
+for (const watchChannels of [null, [channelId]]) {
+    for (const kind of ["text", "announcement", "thread", "forum", "media"]) {
+        test(`${kind === "thread" ? "public thread in a private channel" : `private ${kind} source`} supports reactions and highlights when ${watchChannels ? "selected" : "watching all"}`, async () => {
+            const f = await fixture({ watch_channels: watchChannels });
+            const full = f.source.permissionsFor({});
+            f.source.permissionsFor.mockImplementation((member) =>
+                member === f.message.guild.roles.everyone
+                    ? new PermissionsBitField()
+                    : full,
+            );
+            if (kind === "announcement")
+                f.source.type = ChannelType.GuildAnnouncement;
+            if (["thread", "forum", "media"].includes(kind)) {
+                f.source.isThread.mockReturnValue(true);
+                f.source.type = ChannelType.PublicThread;
+                f.message.channelId = f.source.id = "400000000000000003";
+                f.source.parent.type =
+                    kind === "forum"
+                        ? ChannelType.GuildForum
+                        : kind === "media"
+                          ? ChannelType.GuildMedia
+                          : ChannelType.GuildText;
+            }
+            if (kind === "forum" || kind === "media") await f.thread();
+            else await f.create();
+            expect(f.message.react).toHaveBeenCalledTimes(1);
+            await f.add(f.makeReaction(3, true));
+            expect(f.target.send).toHaveBeenCalledTimes(1);
+            expect(await f.rows()).toEqual([{ star_count: 2 }]);
+        });
+    }
+}
+
+for (const permission of [
+    PermissionFlagsBits.ViewChannel,
+    PermissionFlagsBits.ReadMessageHistory,
+]) {
+    test(`revoking source permission ${permission} stops highlights and auto-reactions`, async () => {
+        const f = await fixture();
+        const full = f.source.permissionsFor({});
+        let revoked = false;
+        f.source.permissionsFor.mockImplementation((member) =>
+            member === f.message.guild.roles.everyone
+                ? new PermissionsBitField()
+                : revoked
+                  ? new PermissionsBitField(full.bitfield & ~permission)
+                  : full,
+        );
+        await f.add(f.makeReaction(2, false));
+        expect(f.target.send).toHaveBeenCalledTimes(1);
+        revoked = true;
+        await f.create();
+        await f.add(f.makeReaction(3, false));
+        expect(f.message.react).not.toHaveBeenCalled();
+        expect(f.target.messages.edit).not.toHaveBeenCalled();
+        expect(f.target.send).toHaveBeenCalledTimes(1);
+        expect(await f.rows()).toEqual([{ star_count: 2 }]);
+    });
+}
 
 test("discovering an existing forum post does not backfill its reaction", async () => {
     const f = await fixture();
@@ -311,7 +383,7 @@ for (const permission of [
         );
         await f.create();
         expect(f.message.react).not.toHaveBeenCalled();
-        expect(f.log.debug).toHaveBeenCalledTimes(1);
+        expect(f.log.warn).not.toHaveBeenCalled();
     });
 }
 
@@ -380,4 +452,46 @@ test("removing the bot's starter refreshes Discord's cached count", async () => 
     await f.removeOwn(f.makeReaction(2, false));
     expect(f.fetch).toHaveBeenCalledTimes(1);
     expect(f.target.send).not.toHaveBeenCalled();
+});
+
+test("photo attachments preview as a gallery on new and updated highlights without revealing spoilers", async () => {
+    const f = await fixture();
+    f.message.content = "";
+    const attachments = [
+        { name: "one.png", contentType: "image/png", spoiler: false },
+        { name: "two.JPG", contentType: null, spoiler: false },
+        { name: "SPOILER_hidden.png", contentType: "image/png", spoiler: true },
+        { name: "notes.pdf", contentType: "application/pdf", spoiler: false },
+        { name: "clip.mp4", contentType: "video/mp4", spoiler: false },
+        { name: "fake.png", contentType: "application/pdf", spoiler: false },
+    ];
+    for (const attachment of attachments)
+        f.message.attachments.set(attachment.name, {
+            ...attachment,
+            url: `https://cdn.discordapp.com/attachments/example/${attachment.name}`,
+        });
+    const gallery = (payload: unknown) =>
+        JSON.parse(JSON.stringify(payload)).components.find(
+            (item: { type: number }) =>
+                item.type === ComponentType.MediaGallery,
+        );
+    await f.add(f.makeReaction(2, false));
+    const posted = f.target.send.mock.calls[0]?.[0];
+    expect(
+        gallery(posted)?.items.map(
+            (item: { media: { url: string } }) => item.media.url,
+        ),
+    ).toEqual([
+        "https://cdn.discordapp.com/attachments/example/one.png",
+        "https://cdn.discordapp.com/attachments/example/two.JPG",
+    ]);
+    expect(componentText(posted)).toContain("Photo attachments");
+    f.message.attachments.delete("one.png");
+    await f.add(f.makeReaction(3, false));
+    const updated = f.target.messages.edit.mock.calls[0]?.[1];
+    expect(gallery(updated)?.items).toHaveLength(1);
+    expect(gallery(updated)?.items[0].media.url).toBe(
+        "https://cdn.discordapp.com/attachments/example/two.JPG",
+    );
+    expect(f.target.send).toHaveBeenCalledTimes(1);
 });

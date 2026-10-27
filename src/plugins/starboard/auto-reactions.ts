@@ -31,7 +31,7 @@ export function starboardAutoReactions(context: Context, queue: KeyedQueue) {
                 !config.enabled ||
                 !config.auto_react ||
                 !config.channel_id ||
-                !watchesStarboardSource(input, config)
+                !(await watchesStarboardSource(input, config))
             )
                 return;
             if (
@@ -115,10 +115,10 @@ export function starboardAutoReactions(context: Context, queue: KeyedQueue) {
             !config.enabled ||
             !config.auto_react ||
             !config.channel_id ||
-            !watchesStarboardSource(
+            !(await watchesStarboardSource(
                 { channel: input, channelId: input.id, guild: input.guild },
                 config,
-            )
+            ))
         )
             return;
         try {
