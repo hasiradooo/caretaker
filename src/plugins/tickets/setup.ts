@@ -1,20 +1,66 @@
-import { ChannelType, type Guild, PermissionFlagsBits } from "discord.js";
-import { sendableChannel } from "../../shared/discord";
+import {
+    ChannelType,
+    type Guild,
+    PermissionFlagsBits,
+    RESTJSONErrorCodes,
+} from "discord.js";
 import { UserError } from "../../shared/errors";
 import type { TicketSettings } from "./config";
+
+/** A channel selection must see permission changes made since the bot connected. */
+export async function refreshTicketChannel(guild: Guild, id: string) {
+    try {
+        await Promise.all([
+            guild.channels.fetch(id, { force: true }),
+            guild.roles.fetch(),
+            guild.members.fetchMe({ force: true }),
+        ]);
+    } catch (error) {
+        if (error && typeof error === "object" && "code" in error) {
+            if (error.code === RESTJSONErrorCodes.UnknownChannel)
+                throw new UserError(
+                    `Channel <#${id}> no longer exists. Choose another channel.`,
+                );
+            if (
+                error.code === RESTJSONErrorCodes.MissingAccess ||
+                error.code === RESTJSONErrorCodes.MissingPermissions
+            )
+                throw new UserError(
+                    `I cannot access <#${id}>. In that channel's Permissions, allow my bot role to View Channel and Send Messages, then select it again. Check category permissions too.`,
+                );
+        }
+        throw error;
+    }
+}
 
 export async function ticketDestination(
     guild: Guild,
     id: string,
     transcript = false,
 ) {
-    const channel = await sendableChannel(guild, id);
+    const channel = await guild.channels.fetch(id);
     if (
-        ![ChannelType.GuildText, ChannelType.GuildAnnouncement].includes(
-            channel.type,
-        )
+        !channel ||
+        (channel.type !== ChannelType.GuildText &&
+            channel.type !== ChannelType.GuildAnnouncement)
     )
         throw new UserError("Choose a server text or announcement channel.");
+    const me = guild.members.me ?? (await guild.members.fetchMe());
+    const permissions = channel.permissionsFor(me);
+    const required = [
+        [PermissionFlagsBits.ViewChannel, "View Channel"],
+        [PermissionFlagsBits.SendMessages, "Send Messages"],
+        ...(transcript
+            ? ([[PermissionFlagsBits.AttachFiles, "Attach Files"]] as const)
+            : []),
+    ] as const;
+    const missing = required
+        .filter(([permission]) => !permissions?.has(permission))
+        .map(([, label]) => label);
+    if (missing.length)
+        throw new UserError(
+            `I need ${missing.join(", ")} in <#${id}>. In that channel's Permissions, allow these for my bot role, then select it again. Check category permissions too.`,
+        );
     if (transcript) {
         if (
             channel
@@ -22,12 +68,7 @@ export async function ticketDestination(
                 ?.has(PermissionFlagsBits.ViewChannel)
         )
             throw new UserError(
-                "Choose a private transcript channel where @everyone cannot View Channel.",
-            );
-        const me = guild.members.me ?? (await guild.members.fetchMe());
-        if (!channel.permissionsFor(me)?.has(PermissionFlagsBits.AttachFiles))
-            throw new UserError(
-                "I need Attach Files in the transcript channel.",
+                `Choose a private transcript channel where @everyone cannot View Channel. <#${id}> is visible to @everyone.`,
             );
     }
     return channel;

@@ -88,7 +88,10 @@ function validLayout(payload: unknown) {
     expect(componentText(json).length).toBeLessThanOrEqual(4000);
 }
 
-async function fixture(kind: "birthday" | "tickets" | "starboard") {
+async function fixture(
+    kind: "birthday" | "tickets" | "starboard",
+    guildId = "200000000000000001",
+) {
     const settings = new SettingsStore(db, botId);
     await settings.patch(guildId, "starboard", starboardSchema, {
         enabled: false,
@@ -150,7 +153,7 @@ async function fixture(kind: "birthday" | "tickets" | "starboard") {
             cache: new Map(
                 watchedIds.map((id) => [id, { id, name: `public-${id}` }]),
             ),
-            fetch: mock(async (id: string) =>
+            fetch: mock(async (id: string, _options?: { force?: boolean }) =>
                 [
                     channelId,
                     privateId,
@@ -176,7 +179,13 @@ async function fixture(kind: "birthday" | "tickets" | "starboard") {
                     : null,
             ),
         },
-        members: { me: { id: botId, permissions: full } },
+        members: {
+            me: { id: botId, permissions: full },
+            fetchMe: mock(async (_options?: { force?: boolean }) => ({
+                id: botId,
+                permissions: full,
+            })),
+        },
         emojis: {
             fetch: mock(async (id: string) =>
                 id === customEmojiId
@@ -190,8 +199,12 @@ async function fixture(kind: "birthday" | "tickets" | "starboard") {
         },
         roles: {
             everyone: { id: guildId },
-            fetch: mock(async (id: string) =>
-                [roleId, otherRole, guildId].includes(id) ? { id } : null,
+            fetch: mock(async (id?: string) =>
+                id === undefined
+                    ? []
+                    : [roleId, otherRole, guildId].includes(id)
+                      ? { id }
+                      : null,
             ),
         },
     };
@@ -469,14 +482,15 @@ test("ticket editor validates destinations and changes role lists without alteri
     await destination("transcript_channel_id", channelId);
     expect((await f.tickets()).transcript_channel_id).toBeNull();
     expect(componentText(f.payload())).toContain("private transcript channel");
-    await destination("transcript_channel_id", privateId);
     await f.act("channels");
+    await destination("transcript_channel_id", privateId);
     await destination("parent_channel_id", categoryId);
     expect((await f.tickets()).parent_channel_id).toBeNull();
-    await destination("parent_channel_id", channelId);
     await f.act("channels");
+    await destination("parent_channel_id", channelId);
     await destination("admin_channel_id", deniedId);
     expect((await f.tickets()).admin_channel_id).toBeNull();
+    await f.act("channels");
     await destination("admin_channel_id", channelId);
     await f.act("staff");
     await f.act("roles", "role", [roleId, otherRole]);
@@ -496,6 +510,79 @@ test("ticket editor validates destinations and changes role lists without alteri
     });
     expect(f.send).not.toHaveBeenCalled();
 });
+
+for (const field of ["panel_channel_id", "transcript_channel_id"] as const) {
+    test(`${field} reports missing permissions, retries in place and saves separately on another server`, async () => {
+        const first = await fixture("tickets");
+        await first.act("choose-destination", "string", [field]);
+        await first.act("destination", "channel", [privateId]);
+        const original = await first.raw();
+
+        const second = await fixture("tickets", "200000000000000002");
+        const before = await second.raw();
+        const fetch = second.guild.channels.fetch.getMockImplementation();
+        if (!fetch) throw new Error("Missing channel fetch");
+        const permitted = second.guild.members.me.permissions;
+        expect(permitted.has(PermissionFlagsBits.Administrator)).toBe(false);
+        let allowed = false;
+        second.guild.channels.fetch.mockImplementation(async (id, options) => {
+            const channel = await fetch(id, options);
+            if (!channel) return null;
+            return {
+                ...channel,
+                permissionsFor: (target: { id?: string }) =>
+                    target.id === botId && !allowed
+                        ? new PermissionsBitField(
+                              PermissionFlagsBits.ViewChannel,
+                          )
+                        : channel.permissionsFor(target),
+            };
+        });
+        await second.act("choose-destination", "string", [field]);
+        await second.act("destination", "channel", [privateId]);
+        expect(await second.raw()).toEqual(before);
+        expect(componentText(second.payload())).toContain("was not saved");
+        expect(componentText(second.payload())).toContain(`<#${privateId}>`);
+        expect(componentText(second.payload())).toContain("Send Messages");
+        if (field === "transcript_channel_id")
+            expect(componentText(second.payload())).toContain("Attach Files");
+        expect(idFor(second.payload(), "destination")).toBeString();
+
+        // Fix channel access, then retry directly in the same picker.
+        allowed = true;
+        await second.act("destination", "channel", [privateId]);
+        expect((await second.tickets())[field]).toBe(privateId);
+        expect(componentText(second.payload())).toContain(
+            `saved: <#${privateId}>`,
+        );
+        expect(await first.raw()).toEqual(original);
+        expect(second.guild.channels.fetch).toHaveBeenCalledWith(privateId, {
+            force: true,
+        });
+        expect(second.guild.roles.fetch).toHaveBeenCalledWith();
+        expect(second.guild.members.fetchMe).toHaveBeenCalledWith({
+            force: true,
+        });
+        expect(second.send).not.toHaveBeenCalled();
+    });
+}
+
+for (const code of [10003, 50001, 50013]) {
+    test(`ticket channel selection handles Discord error ${code} without losing the picker or saved settings`, async () => {
+        const f = await fixture("tickets");
+        const before = await f.raw();
+        await f.act("choose-destination", "string", ["panel_channel_id"]);
+        f.guild.channels.fetch.mockRejectedValueOnce({ code });
+        await f.act("destination", "channel", [channelId]);
+        expect(await f.raw()).toEqual(before);
+        expect(componentText(f.payload())).toContain(`<#${channelId}>`);
+        expect(componentText(f.payload())).toContain(
+            code === 10003 ? "no longer exists" : "cannot access",
+        );
+        await f.act("destination", "channel", [channelId]);
+        expect((await f.tickets()).panel_channel_id).toBe(channelId);
+    });
+}
 
 test("ticket panel edits preview before save and publish only the reviewed saved panel once", async () => {
     const f = await fixture("tickets");
