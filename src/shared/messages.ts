@@ -20,11 +20,14 @@ export const featureIcons: Record<string, string> = {
     birthday: "🎂",
     tickets: "🎫",
     starboard: "⭐",
+    server_stats: "📊",
     tempvc: "🔊",
     slowmode: "⏳",
     auto_ban_bots: "🛡️",
     moderation: "🛡️",
 };
+
+export type CardImage = string | { url: string; spoiler?: boolean };
 
 interface CardOptions {
     title: string;
@@ -34,7 +37,7 @@ interface CardOptions {
     footer?: string;
     thumbnail?: string;
     image?: string;
-    images?: string[];
+    images?: CardImage[];
     /** These names must also be supplied as attachments in the send/edit call. */
     fileNames?: string[];
     actions?: ActionRowBuilder<MessageActionRowComponentBuilder>[];
@@ -106,13 +109,14 @@ export function card(options: CardOptions) {
     if (images.length)
         components.push(
             new MediaGalleryBuilder().addItems(
-                ...images
-                    .slice(0, 10)
-                    .map((url) =>
-                        new MediaGalleryItemBuilder()
-                            .setURL(url)
-                            .setDescription("Shared image"),
-                    ),
+                ...images.slice(0, 10).map((image) => {
+                    const item = new MediaGalleryItemBuilder()
+                        .setURL(typeof image === "string" ? image : image.url)
+                        .setDescription("Shared image");
+                    if (typeof image !== "string" && image.spoiler)
+                        item.setSpoiler(true);
+                    return item;
+                }),
             ),
         );
     for (const name of options.fileNames ?? [])

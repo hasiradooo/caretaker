@@ -37,6 +37,7 @@ duplicate starts and expires after two minutes if a process crashes.
 | `birthday` | Opt-in birthdays, time zones, private removal and an admin editor | `/birthday set/show/remove/settings` |
 | `tickets` | Private support threads, one ongoing ticket per member, staff-only closing and an admin editor | `/ticket open/close/claim/panel/settings` |
 | `starboard` | Reaction highlights, an admin editor and private previews | `/starboard settings` (also `status`, `channel`, `threshold`, `emoji`, `enable`, `disable`) |
+| `server_stats` | Automatic locked counter channels for members, goals, supporters, boosts and staff | `/stats settings`, `/stats refresh` |
 | `tempvc` | Join-to-create voice channels and empty-room cleanup | `/config` |
 | `slowmode` | Temporary slowmode based on activity; restores the prior rate | `/config` |
 | `moderation` | Custom rules for new messages and edits, with exceptions and action logs | `/moderation settings` |

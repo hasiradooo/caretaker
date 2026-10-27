@@ -30,6 +30,20 @@ test("gateway checks accept both verified and limited intent grants", () => {
     ]);
 });
 
+test("presence access is checked only when explicitly requested", () => {
+    const flags = ApplicationFlagsBitField.Flags;
+    const base =
+        flags.GatewayGuildMembersLimited | flags.GatewayMessageContentLimited;
+    expect(missingGatewayIntents(base)).toEqual([]);
+    expect(missingGatewayIntents(base, true)).toEqual(["Presence Intent"]);
+    expect(
+        missingGatewayIntents(base | flags.GatewayPresenceLimited, true),
+    ).toEqual([]);
+    expect(missingGatewayIntents(base | flags.GatewayPresence, true)).toEqual(
+        [],
+    );
+});
+
 test("a mismatched bot ID stops preflight before reading or changing server setup", async () => {
     const get = mock(async () => ({
         id: "100000000000000002",

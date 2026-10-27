@@ -5,6 +5,7 @@ import { createConfigurationPlugin } from "./configuration";
 import { levelsPlugin } from "./levels";
 import { createModerationPlugin } from "./moderation";
 import { createRolesPlugin } from "./roles";
+import { createServerStatsPlugin } from "./server-stats";
 import { createSlowmodePlugin } from "./slowmode";
 import { createStarboardPlugin } from "./starboard";
 import { createTempVoicePlugin } from "./temp-voice";
@@ -20,6 +21,7 @@ export function createPlugins(): Plugin[] {
         birthdayPlugin,
         ticketsPlugin,
         createStarboardPlugin(),
+        createServerStatsPlugin(),
         createTempVoicePlugin(),
         createSlowmodePlugin(),
         createBotGuardPlugin(),

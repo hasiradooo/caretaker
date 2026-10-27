@@ -6,6 +6,7 @@ const boolean = z
 const environmentSchema = z
     .object({
         DISCORD_TOKEN: z.string().min(1),
+        DISCORD_PRESENCES_ENABLED: boolean.default(false),
         DISCORD_CLIENT_ID: z.string().regex(/^\d{17,20}$/),
         DATABASE_URL: z
             .string()

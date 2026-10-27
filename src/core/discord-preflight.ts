@@ -10,7 +10,10 @@ const applicationSchema = z.object({
 const guildSchema = z.object({ id: snowflake, name: z.string() });
 
 /** Limited flags authorize small bots; verified bots receive the full flags. */
-export function missingGatewayIntents(flags: number): string[] {
+export function missingGatewayIntents(
+    flags: number,
+    presences = false,
+): string[] {
     const available = new ApplicationFlagsBitField(flags);
     const required = [
         {
@@ -28,6 +31,14 @@ export function missingGatewayIntents(flags: number): string[] {
             ],
         },
     ];
+    if (presences)
+        required.push({
+            name: "Presence Intent",
+            flags: [
+                ApplicationFlagsBitField.Flags.GatewayPresence,
+                ApplicationFlagsBitField.Flags.GatewayPresenceLimited,
+            ],
+        });
     return required
         .filter((intent) => !available.any(intent.flags))
         .map((intent) => intent.name);
@@ -38,6 +49,7 @@ export async function inspectDiscordAccess(
     rest: Pick<REST, "get">,
     applicationId: string,
     targetGuildId?: string,
+    presences = false,
 ) {
     const application = applicationSchema.parse(
         await rest.get(Routes.oauth2CurrentApplication()),
@@ -70,6 +82,6 @@ export async function inspectDiscordAccess(
     return {
         application,
         guilds,
-        missingIntents: missingGatewayIntents(application.flags),
+        missingIntents: missingGatewayIntents(application.flags, presences),
     };
 }

@@ -346,7 +346,8 @@ Open `/starboard settings` for a private Components V2 editor (Manage Server
 required). Use **Channel**, **Reaction threshold**, **Emoji**, **Watched channels**,
 the self-star toggle, **Enable/Disable auto-reactions**, **Preview**, and
 **Enable/Pause starboard**. The preview uses
-the real highlight layout with sample text and a photo (using your profile image)
+the real highlight layout with sample text and four photos (repeating your profile
+image, with the fourth marked as a spoiler)
 and never posts or notifies anyone.
 Channel and rule edits save without automatically enabling the feature.
 
@@ -387,8 +388,53 @@ Rule changes apply to subsequent reactions; they do not scan historical messages
 or immediately recount all existing highlights. Pausing keeps saved highlights.
 Highlights display up to ten attached photos in a gallery, including posts with
 no text. Photos without a content type are recognized by their filename. Spoiler
-attachments and non-image files are not shown in the gallery. Subsequent reaction
-updates refresh the gallery on the existing highlight.
+photos keep their click-to-reveal spoiler flag. Non-image files are not shown in
+the gallery. Text retains its spoiler formatting; long messages containing spoiler
+markers link to the original instead of truncating and potentially exposing hidden
+text. Subsequent reaction updates refresh the gallery on the existing highlight.
+
+## Server stats: `server_stats`
+
+Open `/stats settings` (Manage Server required) to select an existing category and
+the counters to display. Available counters are total members (including bots),
+humans, bots, a member goal, supporters, boosts, and staff online. Set the goal
+under **Member goal** and choose which roles count under **Supporter roles** and
+**Staff roles**. Members with several selected roles count once; bots are excluded
+from supporter and staff totals. Staff online includes Online, Idle and Do Not
+Disturb; invisible users appear offline.
+
+**Preview** privately shows the proposed channel names without creating anything.
+**Enable stats** starts automatic generation. **Apply now** or `/stats refresh`
+creates missing counters immediately. Counts and channel names normally refresh
+about every ten minutes; manual refreshes and restarts do not bypass the rename
+interval. Member totals use the guild total; human, bot and role counts read the
+complete member list instead of treating the cache as a complete roster.
+
+The bot needs View Channel, Manage Channels and Manage Roles in the selected
+category, plus Connect and Send Messages to set the counter locks. It creates
+voice channels that inherit category visibility but deny joining and chatting to
+ordinary members. Discord administrators retain their normal permission bypass.
+Changing category moves the generated channels. Deselecting counters removes
+only channels managed by this feature; selecting none removes all generated
+counters while enabled. **Pause stats** stops updates and keeps the channels.
+Deleted counters are recreated while enabled. Channel IDs and rename timestamps
+are stored per bot and server, and interrupted creations are recovered on retry.
+
+Staff online is optional and requires the bot owner to enable **Presence Intent**
+in the Discord Developer Portal, set `DISCORD_PRESENCES_ENABLED=true` in `.env`,
+and recreate/restart the bot with the new environment. Other counters work without
+this intent. `bun run discord:check` reports missing Presence access when enabled.
+
+Migration 009 creates the managed-channel table. Existing installations must apply
+it and redeploy slash commands before using `/stats settings`:
+
+```sh
+docker compose build bot
+docker compose stop bot
+docker compose run --rm bot bun run db:migrate --apply
+docker compose run --rm bot bun run commands:deploy --apply
+docker compose up -d bot
+```
 
 ## Temporary voice — `tempvc`
 

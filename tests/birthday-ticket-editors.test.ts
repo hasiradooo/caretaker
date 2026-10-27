@@ -702,12 +702,14 @@ test("starboard editor validates destinations, previews privately and preserves 
             (item: { type: number }) =>
                 item.type === ComponentType.MediaGallery,
         )?.items,
-    ).toEqual([
-        {
+    ).toEqual(
+        Array.from({ length: 4 }, (_, index) => ({
             media: { url: f.member.displayAvatarURL() },
             description: "Shared image",
-        },
-    ]);
+            ...(index === 3 ? { spoiler: true } : {}),
+        })),
+    );
+    expect(componentText(f.payload())).toContain("||Example spoiler text.||");
     expect(f.send).not.toHaveBeenCalled();
     expect(await f.raw()).toEqual(before);
     await f.act("home");

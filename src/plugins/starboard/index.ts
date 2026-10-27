@@ -135,16 +135,12 @@ export function createStarboardPlugin(): Plugin {
                 return;
             }
             const images = message.attachments
-                .filter(
-                    (file) =>
-                        !file.spoiler &&
-                        (file.contentType
-                            ? file.contentType.startsWith("image/")
-                            : /\.(?:avif|gif|jpe?g|png|webp)$/i.test(
-                                  file.name,
-                              )),
+                .filter((file) =>
+                    file.contentType
+                        ? file.contentType.startsWith("image/")
+                        : /\.(?:avif|gif|jpe?g|png|webp)$/i.test(file.name),
                 )
-                .map((file) => file.url);
+                .map((file) => ({ url: file.url, spoiler: file.spoiler }));
             const payload = starboardCard({
                 authorId: message.author.id,
                 avatar: message.author.displayAvatarURL(),
