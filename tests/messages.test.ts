@@ -76,6 +76,21 @@ test("open V2 layouts serialize within API limits without embeds or containers",
     ).toHaveLength(15);
 });
 
+test("multiple photos serialize as one gallery within Discord's ten-image limit", () => {
+    const urls = Array.from(
+        { length: 12 },
+        (_, i) => `https://cdn.discordapp.com/attachments/example/${i}.png`,
+    );
+    const reply = card({ title: "Photos", images: urls });
+    const galleries = reply.components
+        .map((component) => component.toJSON())
+        .filter((component) => component.type === ComponentType.MediaGallery);
+    expect(galleries).toHaveLength(1);
+    expect(galleries[0]?.items.map((item) => item.media.url)).toEqual(
+        urls.slice(0, 10),
+    );
+});
+
 test("oversized text stays inside the total budget without losing the footer or splitting emoji", () => {
     const reply = card({
         title: "x".repeat(1000),

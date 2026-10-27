@@ -34,6 +34,7 @@ interface CardOptions {
     footer?: string;
     thumbnail?: string;
     image?: string;
+    images?: string[];
     /** These names must also be supplied as attachments in the send/edit call. */
     fileNames?: string[];
     actions?: ActionRowBuilder<MessageActionRowComponentBuilder>[];
@@ -101,12 +102,17 @@ export function card(options: CardOptions) {
         );
         components.push(text(section));
     }
-    if (options.image)
+    const images = options.images ?? (options.image ? [options.image] : []);
+    if (images.length)
         components.push(
             new MediaGalleryBuilder().addItems(
-                new MediaGalleryItemBuilder()
-                    .setURL(options.image)
-                    .setDescription("Shared image"),
+                ...images
+                    .slice(0, 10)
+                    .map((url) =>
+                        new MediaGalleryItemBuilder()
+                            .setURL(url)
+                            .setDescription("Shared image"),
+                    ),
             ),
         );
     for (const name of options.fileNames ?? [])

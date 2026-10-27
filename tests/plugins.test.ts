@@ -301,8 +301,10 @@ for (const scenario of [
                     parentId,
                     parent: { nsfw: false },
                     isThread: () => true,
-                    permissionsFor: () => ({
-                        has: () => scenario !== "private-parent",
+                    permissionsFor: (member: unknown) => ({
+                        has: () =>
+                            scenario !== "private-parent" ||
+                            member === guild.members.me,
                     }),
                 },
             },
@@ -318,8 +320,9 @@ for (const scenario of [
             {} as ClientEvents[typeof Events.MessageReactionAdd][1],
             {} as ClientEvents[typeof Events.MessageReactionAdd][2],
         );
-        expect(send).toHaveBeenCalledTimes(scenario === "public" ? 1 : 0);
-        if (scenario === "public")
+        const eligible = scenario === "public" || scenario === "private-parent";
+        expect(send).toHaveBeenCalledTimes(eligible ? 1 : 0);
+        if (eligible)
             expect(componentText(send.mock.calls[0]?.[0])).toContain(
                 `<:new_name:${customEmojiId}>`,
             );

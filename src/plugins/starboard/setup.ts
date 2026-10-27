@@ -40,14 +40,6 @@ export async function starboardSource(
     const me = guild.members.me ?? (await guild.members.fetchMe());
     if (
         !channel
-            .permissionsFor(guild.roles.everyone)
-            ?.has(PermissionFlagsBits.ViewChannel)
-    )
-        throw new UserError(
-            "Starboard only watches public channels. Private channels and private threads are excluded.",
-        );
-    if (
-        !channel
             .permissionsFor(me)
             ?.has([
                 PermissionFlagsBits.ViewChannel,
@@ -127,7 +119,7 @@ export async function validateStarboardSetup(
     await starboardEmoji(guild, config.emoji);
     if (config.watch_channels?.length === 0)
         throw new UserError(
-            "Choose watched channels or All public channels before enabling starboard.",
+            "Choose watched channels or All accessible channels before enabling starboard.",
         );
     for (const id of config.watch_channels ?? [])
         await starboardSource(guild, id, config.channel_id);

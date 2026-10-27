@@ -4,7 +4,7 @@ import type { StarboardSettings } from "./config";
 
 export function watchedChannels(config: StarboardSettings): string {
     return config.watch_channels === null
-        ? "All eligible public channels"
+        ? "All accessible channels"
         : config.watch_channels.length
           ? `${config.watch_channels.length} selected channel(s), including public threads`
           : "None";
@@ -23,7 +23,7 @@ export function starboardCard(input: {
     emoji: string;
     createdAt: number;
     text: string;
-    image?: string;
+    images?: string[];
     url?: string;
     preview?: boolean;
 }) {
@@ -35,11 +35,13 @@ export function starboardCard(input: {
         sections: [
             clipText(
                 input.text ||
-                    "*Attachment or embed — open the original message below.*",
+                    (input.images?.length
+                        ? "*Photo attachments*"
+                        : "*Attachment or embed — open the original message below.*"),
                 3200,
             ),
         ],
-        image: input.image,
+        images: input.images,
         actions: input.url
             ? [
                   new ActionRowBuilder<ButtonBuilder>().addComponents(

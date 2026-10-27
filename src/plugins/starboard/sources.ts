@@ -6,11 +6,11 @@ import {
 } from "discord.js";
 import type { StarboardSettings } from "./config";
 
-/** Keep starter reactions and highlights on the same public, watched sources. */
-export function watchesStarboardSource(
+/** Keep starter reactions and highlights on the same watched sources the bot can read. */
+export async function watchesStarboardSource(
     message: Pick<Message<true>, "channel" | "channelId" | "guild">,
     config: StarboardSettings,
-): boolean {
+): Promise<boolean> {
     const { channel } = message;
     if (
         message.channelId === config.channel_id ||
@@ -29,9 +29,14 @@ export function watchesStarboardSource(
         )
     )
         return false;
+    const me =
+        message.guild.members.me ?? (await message.guild.members.fetchMe());
     return !!channel
-        .permissionsFor(message.guild.roles.everyone)
-        ?.has(PermissionFlagsBits.ViewChannel);
+        .permissionsFor(me)
+        ?.has([
+            PermissionFlagsBits.ViewChannel,
+            PermissionFlagsBits.ReadMessageHistory,
+        ]);
 }
 
 export function canShareStarboardSource(

@@ -94,7 +94,7 @@ export function createStarboardPlugin(): Plugin {
             await remove(context, message.guild, message.id);
             return;
         }
-        if (!watchesStarboardSource(message, config)) return;
+        if (!(await watchesStarboardSource(message, config))) return;
         await queue.run(`${message.guildId}:${message.id}`, async () => {
             const [existing] = await context.db.query<StarboardRow>(
                 "select starboard_message_id,starboard_channel_id,star_count from discord.starboards where bot_id=$1 and guild_id=$2 and source_message_id=$3",
@@ -134,10 +134,17 @@ export function createStarboardPlugin(): Plugin {
                 }
                 return;
             }
-            const attachment = message.attachments.find(
-                (file) =>
-                    file.contentType?.startsWith("image/") && !file.spoiler,
-            );
+            const images = message.attachments
+                .filter(
+                    (file) =>
+                        !file.spoiler &&
+                        (file.contentType
+                            ? file.contentType.startsWith("image/")
+                            : /\.(?:avif|gif|jpe?g|png|webp)$/i.test(
+                                  file.name,
+                              )),
+                )
+                .map((file) => file.url);
             const payload = starboardCard({
                 authorId: message.author.id,
                 avatar: message.author.displayAvatarURL(),
@@ -146,7 +153,7 @@ export function createStarboardPlugin(): Plugin {
                 count,
                 createdAt: message.createdTimestamp,
                 text: message.content,
-                image: attachment?.url,
+                images,
                 url: message.url,
             });
             if (existing) {
